@@ -187,12 +187,33 @@ public final class World {
             let b = w.props["border_size"].flatMap { finiteDouble($0) }.map(World.borderWidth) ?? border
             out[id] = WindowGeometry.frame(tile: box, workArea: ctx.workArea, gapsIn: gaps, borderSize: b, pseudoSize: w.isPseudo ? w.pseudoSize : nil)
         }
-        for id in ws.floating { if let w = windows[id], w.suspended == nil { out[id] = w.floatingFrame } }
+        let visible = monitor(ws.monitor)?.visibleFrame
+        for id in ws.floating { if let w = windows[id], w.suspended == nil { out[id] = World.reachable(w.floatingFrame, in: visible) } }
         for id in ws.windowIDs {
             guard let w = windows[id], w.suspended == nil, let mode = w.fullscreenMode else { continue }
             out[id] = mode == 0 ? fullscreenArea(for: ws) : ctx.workArea.inset(by: Edges(all: border))
         }
         return out
+    }
+
+    static func reachable(_ f: Rect, in visible: Rect?) -> Rect {
+        guard let v = visible, !v.contains(f.center) else { return f }
+        let w = min(f.width, v.width), h = min(f.height, v.height)
+        return Rect(x: min(max(f.x, v.minX), v.maxX - w), y: min(max(f.y, v.minY), v.maxY - h), width: w, height: h)
+    }
+
+    func shiftFloating(_ ids: [WindowID], from old: Rect?, to new: Rect?) {
+        guard let old, let new else { return }
+        let dx = new.x - old.x, dy = new.y - old.y
+        guard dx != 0 || dy != 0 else { return }
+        for id in ids {
+            windows[id]?.floatingFrame.x += dx
+            windows[id]?.floatingFrame.y += dy
+        }
+    }
+
+    func windowIDs(inWorkspace wsID: Int) -> [WindowID] {
+        windows.values.filter { $0.workspace == wsID }.map(\.id).sorted()
     }
 
     func refresh(_ ids: Set<Int>, reason: FrameReason = .layout, opened: WindowID? = nil, skip: WindowID? = nil) {
@@ -330,13 +351,16 @@ public final class World {
     func setMonitors(_ infos: [MonitorInfo]) {
         let sorted = infos.sorted { $0.id < $1.id }
         let layoutChanged = sorted != monitors
+        let previous = monitors
         monitors = sorted
         guard let primary = monitors.first?.id else { return }
         let ids = Set(monitors.map(\.id))
         for (id, var ws) in workspaces {
+            let was = ws.monitor
             if let home = monitors.first(where: { $0.name == ws.homeMonitorName }) { ws.monitor = home.id }
             else if !ids.contains(ws.monitor) { ws.monitor = primary }
             workspaces[id] = ws
+            shiftFloating(windowIDs(inWorkspace: id), from: previous.first { $0.id == was }?.frame, to: monitor(ws.monitor)?.frame)
         }
         activeWorkspace = activeWorkspace.filter { ids.contains($0.key) && workspaces[$0.value]?.monitor == $0.key }
         activeSpecial = activeSpecial.filter { ids.contains($0.key) && workspaces[$0.value]?.monitor == $0.key }
@@ -351,7 +375,9 @@ public final class World {
             let hidden = workspaces.values.filter { $0.monitor == m.id && !$0.isSpecial && !activeWorkspace.values.contains($0.id) }.map(\.id).min()
             let chosen = remembered ?? ruleDefault ?? hidden ?? lowestUnusedID()
             ensureWorkspace(chosen, monitor: m.id)
+            let prior = workspaces[chosen]?.monitor
             workspaces[chosen]?.monitor = m.id
+            if let prior, prior != m.id { shiftFloating(windowIDs(inWorkspace: chosen), from: monitor(prior)?.frame, to: m.frame) }
             activeWorkspace[m.id] = chosen
             lastActiveByMonitorName[m.name] = chosen
         }

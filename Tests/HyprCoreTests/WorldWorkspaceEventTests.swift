@@ -109,18 +109,28 @@ func twoWindows(_ text: String = "") -> World {
     }
 
     @Test func unplugAndReplugKeepsWorkspaces() {
-        let w = world("workspace = 6, monitor:1, default:true", monitors: [laptop, ultrawide])
+        let w = world("workspace = 6, monitor:1, default:true\nwindowrule = float on, match:class Calculator", monitors: [laptop, ultrawide])
         #expect(w.activeWorkspace[1] == 6)
         w.focusMonitor(1)
         _ = w.takeEffects()
         _ = w.handle(.windowAppeared(snap(9, pid: 900)))
+        let docked = Rect(x: 2000, y: 100, width: 800, height: 600)
+        _ = w.handle(.windowAppeared(snap(10, app: "Calculator", bundle: "com.apple.calculator", pid: 1000, frame: docked)))
         #expect(w.windows[9]?.workspace == 6)
+        #expect(w.windows[10]?.workspace == 6)
         let unplug = w.handle(.monitorsChanged([laptop]))
         #expect(parks(unplug)[9] != nil)
         #expect(w.workspaces[6]?.monitor == 0)
+        #expect(w.windows[10]?.floatingFrame == Rect(x: 488, y: 100, width: 800, height: 600))
+        w.switchWorkspace(6)
+        let undocked = w.takeEffects()
+        #expect(frames(undocked)[10] == Rect(x: 488, y: 100, width: 800, height: 600))
+        w.switchWorkspace(1)
+        _ = w.takeEffects()
         let replug = w.handle(.monitorsChanged([laptop, ultrawide]))
         #expect(w.activeWorkspace[1] == 6)
         #expect(frames(replug)[9] == ultrawide.visibleFrame)
+        #expect(frames(replug)[10] == docked)
     }
 
     @Test func focusMonitorWarpsAndSwapActive() {
@@ -495,11 +505,101 @@ func twoWindows(_ text: String = "") -> World {
         #expect(w.activeWorkspace[0] == 1)
     }
 
-    @Test func focusMonitorHonoursNoWarps() {
+    @Test func focusMonitorWarpsEvenWithNoWarps() {
         let w = world("cursor:no_warps = true", monitors: [laptop, ultrawide])
         w.focusMonitor(1)
         let e = w.takeEffects()
         #expect(w.focusedMonitor == 1)
-        #expect(!e.contains { if case .warpCursor = $0 { return true }; return false })
+        #expect(e.contains(.warpCursor(Point(x: 3232, y: 720))))
+        w.focusMonitor(1)
+        #expect(!w.takeEffects().contains { if case .warpCursor = $0 { return true }; return false })
+    }
+
+    @Test func floatingWindowsMoveWithTheirMonitor() {
+        let calc = "windowrule = float on, match:class Calculator"
+        let a = Rect(x: 100, y: 100, width: 600, height: 400)
+        func floatWorld() -> World {
+            let w = world(calc, monitors: [laptop, ultrawide])
+            _ = w.handle(.windowAppeared(snap(5, app: "Calculator", bundle: "com.apple.calculator", pid: 50, frame: a)))
+            _ = w.takeEffects()
+            return w
+        }
+        let moved = floatWorld()
+        moved.moveWindow(5, toWorkspace: 2, silent: false)
+        #expect(frames(moved.takeEffects())[5] == Rect(x: 1612, y: 100, width: 600, height: 400))
+        moved.moveWindow(5, toWorkspace: 1, silent: true)
+        #expect(moved.windows[5]?.floatingFrame == a)
+
+        let workspace = floatWorld()
+        workspace.moveWorkspace(1, toMonitor: 1)
+        #expect(frames(workspace.takeEffects())[5] == Rect(x: 1612, y: 100, width: 600, height: 400))
+
+        let swapped = floatWorld()
+        _ = swapped.handle(.windowAppeared(snap(6, app: "Calculator", bundle: "com.apple.calculator", pid: 60, frame: Rect(x: 2000, y: 300, width: 500, height: 300))))
+        swapped.focusMonitor(1)
+        _ = swapped.handle(.windowAppeared(snap(7, app: "Calculator", bundle: "com.apple.calculator", pid: 70, frame: Rect(x: 2000, y: 300, width: 500, height: 300))))
+        _ = swapped.takeEffects()
+        swapped.swapActiveWorkspaces(0, 1)
+        let e = frames(swapped.takeEffects())
+        #expect(e[5] == Rect(x: 1612, y: 100, width: 600, height: 400))
+        #expect(e[7] == Rect(x: 488, y: 300, width: 500, height: 300))
+    }
+
+    @Test func specialWorkspaceFloatsFollowItAcrossMonitors() {
+        let w = world("windowrule = float on, match:class Calculator", monitors: [laptop, ultrawide])
+        _ = w.handle(.windowAppeared(snap(5, app: "Calculator", bundle: "com.apple.calculator", pid: 50)))
+        let special = w.resolveWorkspace(.special("magic"))!
+        w.moveWindow(5, toWorkspace: special, silent: false)
+        _ = w.takeEffects()
+        w.toggleSpecial(special, show: true, on: 1)
+        #expect(frames(w.takeEffects())[5] == Rect(x: 1612, y: 100, width: 600, height: 400))
+    }
+
+    @Test func unreachableFloatsAreFittedIntoTheirMonitor() {
+        let w = world("windowrule = float on, match:class Calculator")
+        _ = w.handle(.windowAppeared(snap(5, app: "Calculator", bundle: "com.apple.calculator", pid: 50)))
+        w.windows[5]?.floatingFrame = Rect(x: 2000, y: 300, width: 600, height: 400)
+        let e = w.reload(w.config)
+        #expect(frames(e)[5] == Rect(x: 912, y: 300, width: 600, height: 400))
+        w.windows[5]?.floatingFrame = Rect(x: -5000, y: 2000, width: 5000, height: 5000)
+        #expect(frames(w.reload(w.config))[5] == laptop.visibleFrame)
+    }
+
+    @Test func floatEchoOfAClampedFrameIsNotStored() {
+        let w = world("windowrule = float on, match:class Calculator")
+        _ = w.handle(.windowAppeared(snap(5, app: "Calculator", bundle: "com.apple.calculator", pid: 50)))
+        w.windows[5]?.floatingFrame = Rect(x: 2000, y: 300, width: 600, height: 400)
+        _ = w.reload(w.config)
+        let echo = w.handle(.windowFrameChanged(5, Rect(x: 912, y: 300, width: 600, height: 400), userDriven: false))
+        #expect(echo.isEmpty)
+        #expect(w.windows[5]?.floatingFrame == Rect(x: 2000, y: 300, width: 600, height: 400))
+    }
+
+    @Test func previousWorkspaceRoundTripsAcrossMonitors() {
+        let w = world(monitors: [laptop, ultrawide])
+        _ = w.handle(.windowAppeared(snap(1)))
+        w.switchWorkspace(2)
+        #expect(w.focusedMonitor == 1)
+        #expect(w.resolveWorkspace(.previous) == 1)
+        w.switchWorkspace(w.resolveWorkspace(.previous)!)
+        #expect(w.focusedMonitor == 0)
+        #expect(w.focusedWindow == 1)
+        #expect(w.resolveWorkspace(.previous) == 2)
+        w.switchWorkspace(w.resolveWorkspace(.previous)!)
+        #expect(w.focusedMonitor == 1)
+        #expect(w.resolveWorkspace(.previous) == 1)
+    }
+
+    @Test func lateFocusEventsForUnknownWindowsAreIgnored() {
+        let w = twoWindows()
+        #expect(w.focusedWindow == 2)
+        #expect(w.handle(.focusChanged(99)).isEmpty)
+        #expect(w.focusedWindow == 2)
+        _ = w.handle(.windowDisappeared(2))
+        #expect(w.focusedWindow == 1)
+        #expect(w.handle(.focusChanged(2)).isEmpty)
+        #expect(w.focusedWindow == 1)
+        _ = w.handle(.focusChanged(nil))
+        #expect(w.focusedWindow == nil)
     }
 }

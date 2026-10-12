@@ -95,6 +95,7 @@ extension World {
         let mon = ws.monitor
         let old = activeWorkspace[mon]
         if old == target {
+            if let current, current != target { previousWorkspace = current }
             focusedMonitor = mon
             focusWindow(focusing ?? ws.lastFocused ?? ws.windowIDs.first, warp: true, emitEffect: emitFocus)
             focusedMonitor = mon
@@ -140,8 +141,10 @@ extension World {
                 refresh([previous])
                 destroyIfUnused(previous)
             }
+            let from = workspaces[id].flatMap { monitor($0.monitor) }
             workspaces[id]?.monitor = mon
             workspaces[id]?.homeMonitorName = info.name
+            shiftFloating(windowIDs(inWorkspace: id), from: from?.frame, to: info.frame)
             activeSpecial[mon] = id
             refresh([id], reason: .workspaceIn(leftward: true))
             for w in workspaces[id]?.windowIDs ?? [] { emit(.raise(w)) }
@@ -173,6 +176,8 @@ extension World {
         let center = (w.appliedFrame ?? w.lastFrame).center
         let wasFocused = focusedWindow == id
         ensureWorkspace(target)
+        shiftFloating([id], from: workspaces[source].flatMap { monitor($0.monitor) }?.frame,
+                      to: workspaces[target].flatMap { monitor($0.monitor) }?.frame)
         windows[id]?.fullscreenMode = nil
         detach(id)
         attach(id, to: target, focalPoint: focalPoint)
@@ -206,7 +211,7 @@ extension World {
         }.first
         focusWindow(candidate, warp: false, emitEffect: true)
         focusedMonitor = id
-        if !config.cursor.noWarps, !m.frame.contains(cursor) {
+        if !m.frame.contains(cursor) {
             cursor = m.frame.center
             emit(.warpCursor(m.frame.center))
         }
@@ -232,6 +237,7 @@ extension World {
         ws.monitor = target
         ws.homeMonitorName = tm.name
         workspaces[wsID] = ws
+        shiftFloating(windowIDs(inWorkspace: wsID), from: monitor(from)?.frame, to: tm.frame)
         var affected: Set<Int> = [wsID]
         let displaced = activeWorkspace[target]
         if let displaced { affected.insert(displaced) }
@@ -257,6 +263,8 @@ extension World {
         workspaces[wa]?.homeMonitorName = mb.name
         workspaces[wb]?.monitor = a
         workspaces[wb]?.homeMonitorName = ma.name
+        shiftFloating(windowIDs(inWorkspace: wa), from: ma.frame, to: mb.frame)
+        shiftFloating(windowIDs(inWorkspace: wb), from: mb.frame, to: ma.frame)
         activeWorkspace[a] = wb
         activeWorkspace[b] = wa
         lastActiveByMonitorName[ma.name] = wb

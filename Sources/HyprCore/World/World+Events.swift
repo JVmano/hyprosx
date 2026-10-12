@@ -75,10 +75,11 @@ extension World {
         guard var w = windows[id], w.suspended == nil, !w.isParked else { return }
         let fullscreen = w.fullscreenMode != nil
         if w.isFloating && !fullscreen {
-            let unchanged = w.floatingFrame.isClose(to: frame)
+            let nearApplied = w.appliedFrame.map { $0.isClose(to: frame) } == true
+            let unchanged = nearApplied || w.floatingFrame.isClose(to: frame)
             w.lastFrame = frame
-            w.floatingFrame = frame
-            w.appliedFrame = frame
+            if !nearApplied { w.appliedFrame = frame }
+            if !unchanged { w.floatingFrame = frame }
             windows[id] = w
             guard !unchanged else { return }
             if let m = monitorID(containing: frame.center), m != workspaces[w.workspace]?.monitor,
@@ -149,6 +150,7 @@ extension World {
     }
 
     func nativeFocusChanged(_ id: WindowID?) {
+        if let id, windows[id] == nil { return }
         guard let id, let w = windows[id], w.suspended == nil else {
             if focusedWindow != nil {
                 focusedWindow = nil
