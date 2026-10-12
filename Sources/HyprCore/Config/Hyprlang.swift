@@ -28,7 +28,7 @@ public struct HyprlangParser {
 
     public func parse(text: String, path: String) -> (entries: [ConfigEntry], diagnostics: [Diagnostic]) {
         var state = State(variables: environment)
-        run(text: text, path: path, state: &state, stack: [path])
+        run(text: text, path: path, state: &state, stack: [Self.normalized(path)])
         return (state.entries, state.diagnostics)
     }
 
@@ -71,7 +71,7 @@ public struct HyprlangParser {
                 }
                 continue
             }
-            if skipDepth > 0 { continue }
+            if skipDepth > 0 || trimmedRaw.hasPrefix("#") { continue }
             let line = stripComment(rawLine).trimmingCharacters(in: .whitespaces)
             if line.isEmpty { continue }
             if line == "}" {
@@ -111,7 +111,25 @@ public struct HyprlangParser {
     }
 
     private static func physicalLines(_ text: String) -> [Substring] {
-        text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
+        var lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
+        if lines.last?.isEmpty == true { lines.removeLast() }
+        return lines
+    }
+
+    private static let maxSourceDepth = 64
+
+    private static func normalized(_ path: String) -> String {
+        let absolute = path.hasPrefix("/")
+        var parts: [Substring] = []
+        for component in path.split(separator: "/") {
+            if component == "." { continue }
+            if component == ".." {
+                if let last = parts.last, last != ".." { parts.removeLast() } else if !absolute { parts.append(component) }
+                continue
+            }
+            parts.append(component)
+        }
+        return (absolute ? "/" : "") + parts.joined(separator: "/")
     }
 
     private func logicalLines(_ text: String, path: String, state: inout State) -> [(Int, String)] {
@@ -224,11 +242,13 @@ public struct HyprlangParser {
             let dir = (path as NSString).deletingLastPathComponent
             target = (dir as NSString).appendingPathComponent(target)
         }
+        target = Self.normalized(target)
         if target.count < 2 { state.diagnostics.append(Diagnostic(loc, "source= path \(raw) bogus!")); return }
         let matches = glob(target)
         if matches.isEmpty { state.diagnostics.append(Diagnostic(loc, "source= globbing error: found no match")); return }
-        for file in matches {
-            if stack.contains(file) { state.diagnostics.append(Diagnostic(loc, "source= recursion detected")); continue }
+        for match in matches {
+            let file = Self.normalized(match)
+            if stack.contains(file) || stack.count >= Self.maxSourceDepth { state.diagnostics.append(Diagnostic(loc, "source= recursion detected")); continue }
             guard let text = readFile(file) else {
                 state.diagnostics.append(Diagnostic(loc, "source= file \(file) is inaccessible!"))
                 continue

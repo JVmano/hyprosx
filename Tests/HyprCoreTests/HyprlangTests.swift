@@ -105,6 +105,51 @@ private func pairs(_ r: (entries: [ConfigEntry], diagnostics: [Diagnostic])) -> 
         #expect(pairs(r) == ["ok=1"])
     }
 
+    @Test func dotSlashSelfSourceIsRecursion() {
+        let r = parse("source = ./hyprland.conf", files: ["/cfg/hyprland.conf": "source = ./hyprland.conf"])
+        #expect(r.diagnostics.map(\.message) == ["source= recursion detected"])
+        #expect(r.entries.isEmpty)
+    }
+
+    @Test func dotSlashTwoFileCycleIsRecursion() {
+        let files = ["/cfg/a.conf": "source = ./b.conf", "/cfg/b.conf": "source = ./a.conf"]
+        let r = parse("source = ./a.conf", files: files)
+        #expect(r.diagnostics.map(\.message) == ["source= recursion detected"])
+    }
+
+    @Test func sourcedEntriesCarryNormalisedPaths() {
+        let r = parse("source = ./apps.conf\nsource = ../cfg/./apps.conf", files: ["/cfg/apps.conf": "x = 1"])
+        #expect(r.entries.map(\.location.file) == ["/cfg/apps.conf", "/cfg/apps.conf"])
+        #expect(r.diagnostics.isEmpty)
+    }
+
+    @Test func sourceDepthIsCapped() {
+        let parser = HyprlangParser(
+            environment: [:],
+            readFile: { $0.hasSuffix("/x.conf") ? "source = loop/x.conf" : nil },
+            glob: { [$0] })
+        let r = parser.parse(text: "source = loop/x.conf", path: "/cfg/hyprland.conf")
+        #expect(r.diagnostics.map(\.message) == ["source= recursion detected"])
+    }
+
+    @Test func hashBannerLinesAreComments() {
+        let r = parse("################\n### MONITORS ###\nx = 1")
+        #expect(pairs(r) == ["x=1"])
+        #expect(r.diagnostics.isEmpty)
+    }
+
+    @Test func trailingBackslashOnNewlineTerminatedFileIsReported() {
+        let r = parse("a = 1 \\\n")
+        #expect(r.diagnostics.map(\.message) == ["Last line ends with backslash"])
+        #expect(r.diagnostics.map(\.location.line) == [1])
+    }
+
+    @Test func unclosedCategoryReportsLastLineOfNewlineTerminatedFile() {
+        let r = parse("open {\n")
+        #expect(r.diagnostics.map(\.message) == ["Unclosed category at EOF"])
+        #expect(r.diagnostics.map(\.location.line) == [1])
+    }
+
     @Test func missingSourceIsAnError() {
         let r = parse("source = nothing/*")
         #expect(r.diagnostics.first?.message == "source= globbing error: found no match")
