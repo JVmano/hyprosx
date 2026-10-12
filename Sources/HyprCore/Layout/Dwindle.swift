@@ -1,7 +1,5 @@
 import Foundation
 
-private func safeRatio(_ v: Double) -> Double { v.isNaN ? 1 : clampRatio(v) }
-
 public struct DwindleLayout: TiledLayout, Equatable, Codable, Sendable {
     struct Node: Equatable, Codable, Sendable {
         var parent: Int?
@@ -99,12 +97,15 @@ public struct DwindleLayout: TiledLayout, Equatable, Codable, Sendable {
             opening = leaves(from: root).first { boxes[$0]?.contains(mouse) == true } ?? closestLeaf(to: mouse, boxes)
         }
         if opening == nil { opening = leaves(from: root).first }
+        guard let target = opening, let box = boxes[target] else {
+            if root == nil { root = make(Node(window: id)) }
+            return
+        }
         let newLeaf = make(Node(window: id))
-        guard let target = opening, let box = boxes[target] else { root = newLeaf; return }
 
         let grandparent = nodes[target]?.parent
         var parent = Node(parent: grandparent)
-        parent.ratio = safeRatio(o.defaultSplitRatio)
+        parent.ratio = clampRatio(o.defaultSplitRatio)
         let sideBySide = box.width > box.height * o.splitWidthMultiplier
         parent.splitTop = !sideBySide
         var newFirst: Bool
@@ -128,7 +129,7 @@ public struct DwindleLayout: TiledLayout, Equatable, Codable, Sendable {
         } else {
             newFirst = o.forceSplit == 1
         }
-        if o.splitBias == 1 && newFirst { parent.ratio = 2 - parent.ratio }
+        if o.splitBias != 0 && newFirst { parent.ratio = 2 - parent.ratio }
         parent.children = newFirst ? [newLeaf, target] : [target, newLeaf]
         let parentID = make(parent)
         nodes[target]?.parent = parentID
@@ -194,15 +195,15 @@ public struct DwindleLayout: TiledLayout, Equatable, Codable, Sendable {
             let boxes = nodeBoxes(ctx)
             guard let outer, let op = nodes[outer]?.parent, let obox = boxes[op], extent(obox) > 0 else { return }
             let outerRatio = nodes[op]?.ratio ?? 1
-            nodes[op]?.ratio = safeRatio(outerRatio + amount * 2 / extent(obox))
+            nodes[op]?.ratio = clampRatio(outerRatio + amount * 2 / extent(obox))
             guard let inner, let ip = nodes[inner]?.parent, let ibox = boxes[inner] else { return }
             let original = extent(ibox)
             guard let newParentBox = nodeBoxes(ctx)[ip], extent(newParentBox) > 0 else { return }
             let pe = extent(newParentBox)
             let innerFirst = nodes[ip]?.children.first == inner
             nodes[ip]?.ratio = innerFirst
-                ? safeRatio((original - amount) / pe * 2)
-                : safeRatio(2 - (original + amount) / pe * 2)
+                ? clampRatio((original - amount) / pe * 2)
+                : clampRatio(2 - (original + amount) / pe * 2)
         }
         apply(outer: hOuter, inner: hInner, amount: allowed.x, extent: { $0.width })
         apply(outer: vOuter, inner: vInner, amount: allowed.y, extent: { $0.height })
@@ -219,7 +220,7 @@ public struct DwindleLayout: TiledLayout, Equatable, Codable, Sendable {
         }
         func bump(_ id: Int, _ amount: Double, _ extent: Double) {
             guard extent > 0, let current = nodes[id]?.ratio else { return }
-            nodes[id]?.ratio = safeRatio(current + amount * 2 / extent)
+            nodes[id]?.ratio = clampRatio(current + amount * 2 / extent)
         }
         guard let other, let obox = boxes[other] else {
             if parentSideBySide { bump(p, allowed.x, pbox.width) } else { bump(p, allowed.y, pbox.height) }
@@ -291,7 +292,7 @@ public struct DwindleLayout: TiledLayout, Equatable, Codable, Sendable {
             let exact = words.contains("exact")
             guard let value = words.dropFirst().first(where: { $0 != "exact" }).flatMap(Double.init), value.isFinite else { return .error("invalid splitratio") }
             let current = nodes[p]?.ratio ?? 1
-            nodes[p]?.ratio = safeRatio(exact ? value : current + value)
+            nodes[p]?.ratio = clampRatio(exact ? value : current + value)
             return .ok
         case "movetoroot":
             return moveToRoot(l, stable: !words.contains("unstable"))

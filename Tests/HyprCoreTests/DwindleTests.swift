@@ -208,4 +208,68 @@ private func three(_ edit: (inout DwindleOptions) -> Void = { _ in }) -> Dwindle
         d.resize(1, by: Point(x: 1e300, y: 0), corner: .none, ctx())
         #expect(d.tileBoxes(ctx())[1]?.width == 760)
     }
+
+    @Test func clampRatioMapsNaNToNeutral() {
+        #expect(clampRatio(.nan) == 1)
+        #expect(clampRatio(-.infinity) == 0.1)
+        #expect(clampRatio(.infinity) == 1.9)
+        #expect(clampRatio(1.25) == 1.25)
+    }
+
+    @Test func splitBiasIsTruthy() {
+        var d = DwindleLayout()
+        let opts: (inout DwindleOptions) -> Void = { $0.splitBias = 2; $0.defaultSplitRatio = 1.2; $0.forceSplit = 1 }
+        d.insert(1, ctx(nil, opts))
+        d.insert(2, ctx(1, opts))
+        let b = d.tileBoxes(ctx(nil, opts))
+        #expect(b[2] == Rect(x: 0, y: 0, width: 320, height: 500))
+        #expect(b[1] == Rect(x: 320, y: 0, width: 480, height: 500))
+    }
+
+    @Test func insertNeverOrphansANonEmptyTree() {
+        var d = three()
+        let root = d.root
+        d.nodes[root!] = nil
+        let before = d.nodes
+        d.insert(4, ctx(3))
+        #expect(d.root == root)
+        #expect(d.nodes == before)
+    }
+
+    @Test func smartResizeTreatsWorkAreaEdgesAsPinned() {
+        var left = three()
+        left.resize(1, by: Point(x: 100, y: 0), corner: .bottomLeft, ctx())
+        #expect(left.tileBoxes(ctx()) == [
+            1: Rect(x: 0, y: 0, width: 500, height: 500),
+            2: Rect(x: 500, y: 0, width: 300, height: 250),
+            3: Rect(x: 500, y: 250, width: 300, height: 250),
+        ])
+        var right = three()
+        right.resize(3, by: Point(x: -50, y: -50), corner: .topRight, ctx())
+        #expect(right.tileBoxes(ctx()) == [
+            1: Rect(x: 0, y: 0, width: 350, height: 500),
+            2: Rect(x: 350, y: 0, width: 450, height: 200),
+            3: Rect(x: 350, y: 200, width: 450, height: 300),
+        ])
+    }
+
+    @Test func resizeIgnoresDeltaAlongAnAxisSpanningTheWorkArea() {
+        let narrow = LayoutContext(workArea: Rect(x: 0, y: 0, width: 30, height: 500), dwindle: {
+            var o = DwindleOptions()
+            o.defaultSplitRatio = 1.9
+            return o
+        }())
+        var d = DwindleLayout()
+        d.insert(1, narrow)
+        #expect(d.message("preselect r", narrow) == .ok)
+        d.insert(2, narrow)
+        let before = d.tileBoxes(narrow)
+        #expect(before[1]?.width == 28.5)
+        d.resize(1, by: Point(x: -5, y: 0), corner: .none, narrow)
+        #expect(d.tileBoxes(narrow) == before)
+        var plain = narrow
+        plain.dwindle.smartResizing = false
+        d.resize(1, by: Point(x: -5, y: 0), corner: .none, plain)
+        #expect(d.tileBoxes(narrow) == before)
+    }
 }

@@ -34,4 +34,4 @@ public protocol TiledLayout: Sendable {
     func nextFocusCandidate(near point: Point, _ ctx: LayoutContext) -> WindowID?
 }
 
-func clampRatio(_ v: Double) -> Double { min(max(v, 0.1), 1.9) }
+func clampRatio(_ v: Double) -> Double { v.isNaN ? 1 : min(max(v, 0.1), 1.9) }
