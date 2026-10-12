@@ -373,4 +373,51 @@ func allBounded(_ effects: [Effect], limit: Double = 1_000_000) -> Bool {
         _ = w.handle(.windowDisappeared(1))
         #expect(!w.ignored.contains(1))
     }
+
+    @Test func namedSpecialWorkspaceIdsAreReusedAfterTheyEmpty() {
+        let w = world("""
+        windowrule = workspace special:magic silent, match:class Term
+        windowrule = workspace special:other silent, match:class Notes
+        """)
+        for i in 1...100 {
+            let id = WindowID(i)
+            _ = w.handle(.windowAppeared(snap(id, app: "Term", bundle: "x.term")))
+            #expect(w.windows[id]?.workspace == -98)
+            _ = w.handle(.windowDisappeared(id))
+            #expect(w.workspaces[-98] == nil)
+        }
+        _ = w.handle(.windowAppeared(snap(200, app: "Term", bundle: "x.term")))
+        _ = w.handle(.windowAppeared(snap(201, app: "Notes", bundle: "x.notes")))
+        #expect(w.windows[200]?.workspace == -98)
+        #expect(w.windows[201]?.workspace == -97)
+        _ = w.handle(.windowDisappeared(200))
+        _ = w.handle(.windowAppeared(snap(202, app: "Term", bundle: "x.term")))
+        #expect(w.windows[202]?.workspace == -98)
+        #expect(w.workspaces[-97]?.name == "other")
+    }
+
+    @Test func namedWorkspaceIdsSkipIdsAlreadyInUse() {
+        let w = world("""
+        windowrule = workspace 1000000, match:class A
+        windowrule = workspace name:web, match:class B
+        """)
+        _ = w.handle(.windowAppeared(snap(1, app: "A", bundle: "x.a")))
+        _ = w.handle(.windowAppeared(snap(2, app: "B", bundle: "x.b")))
+        #expect(w.windows[1]?.workspace == 1_000_000)
+        #expect(w.windows[2]?.workspace == 1_000_001)
+        #expect(w.workspaces[1_000_000]?.name == "1000000")
+        #expect(w.workspaces[1_000_001]?.name == "web")
+    }
+
+    @Test func noInitialFocusHandsFocusBackToThePreviousWindow() {
+        let w = world("windowrule = no_initial_focus on, match:class Quiet")
+        let first = w.handle(.windowAppeared(snap(1, app: "Quiet", bundle: "x.quiet")))
+        #expect(w.focusedWindow == nil)
+        #expect(!first.contains { if case .focus = $0 { return true } else { return false } })
+        _ = w.handle(.windowAppeared(snap(2)))
+        let e = w.handle(.windowAppeared(snap(3, app: "Quiet", bundle: "x.quiet")))
+        #expect(w.focusedWindow == 2)
+        #expect(e.contains(.focus(2)))
+        #expect(!e.contains(.focus(3)))
+    }
 }

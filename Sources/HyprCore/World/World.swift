@@ -18,7 +18,6 @@ public final class World {
     var previousPerMonitor: [Int: Int] = [:]
     var lastActiveByMonitorName: [String: Int] = [:]
     var nextNamedID = 1_000_000
-    var nextSpecialID = -98
     var spawnRules: [Int: String] = [:]
     var pidRules: [Int32: String] = [:]
     var nextSpawnToken = 1
@@ -301,6 +300,7 @@ public final class World {
             let name = String(s.dropFirst(5))
             guard !name.isEmpty else { return nil }
             if let ws = workspaces.values.first(where: { !$0.isSpecial && $0.name == name }) { return ws.id }
+            while workspaces[nextNamedID] != nil { nextNamedID += 1 }
             let id = nextNamedID
             nextNamedID += 1
             return ensureWorkspace(id, name: name)
@@ -309,9 +309,7 @@ public final class World {
             let name = s == "special" ? "special" : String(s.dropFirst(8))
             guard !name.isEmpty else { return nil }
             if let ws = workspaces.values.first(where: { $0.isSpecial && $0.name == name }) { return ws.id }
-            if name != "special" && nextSpecialID >= 0 { return nil }
-            let id = name == "special" ? -99 : nextSpecialID
-            if name != "special" { nextSpecialID += 1 }
+            guard let id = name == "special" ? -99 : (-98 ... -1).first(where: { workspaces[$0] == nil }) else { return nil }
             return ensureWorkspace(id, name: name, special: true)
         }
         return nil
@@ -403,8 +401,8 @@ public final class World {
         attach(s.id, to: target)
         if !isVisible(target) && !silent && outcome.workspace != nil { showWorkspace(target) }
         refresh([target], opened: s.id)
-        if isVisible(target) {
-            if !outcome.noInitialFocus { focusWindow(s.id, warp: false, emitEffect: true) }
+        if isVisible(target) && !outcome.noInitialFocus {
+            focusWindow(s.id, warp: false, emitEffect: true)
         } else if let previous = focusedWindow {
             emit(.focus(previous))
         }
