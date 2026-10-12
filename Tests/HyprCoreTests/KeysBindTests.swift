@@ -11,6 +11,9 @@ private let here = SourceLocation(file: "/cfg/hyprland.conf", line: 7)
     ] as [(String, Modifiers)])
     func modifiers(_ raw: String, _ expected: Modifiers) { #expect(Modifiers.parse(raw) == expected) }
 
+    @Test(arguments: ["SUPER_AND_SHIFT", "SUPER+AND+SHIFT", "SUPERANDSHIFT", "SUPER AND SHIFT", "AND SUPER SHIFT"])
+    func andIsASeparatorWord(_ raw: String) { #expect(Modifiers.parse(raw) == [.command, .shift]) }
+
     @Test func unsupportedModifiersAreNil() {
         #expect(Modifiers.parse("MOD2") == nil)
         #expect(Modifiers.parse("HYPER") == nil)
@@ -75,6 +78,7 @@ private let here = SourceLocation(file: "/cfg/hyprland.conf", line: 7)
         let r = BindParser.parse(keyword: "bind", value: ", catchall, submap, reset", submap: "resize", location: here)
         #expect(r.bind == nil)
         #expect(r.diagnostics.map(\.message) == ["catchall binds are not supported on macOS"])
+        #expect(r.diagnostics.map(\.isWarning) == [true])
     }
 
     @Test func errors() {
@@ -83,11 +87,27 @@ private let here = SourceLocation(file: "/cfg/hyprland.conf", line: 7)
         #expect(BindParser.parse(keyword: "bind", value: "MOD3, X, exec, a", submap: "", location: here).diagnostics.first?.message == "invalid modifiers 'MOD3'")
         #expect(BindParser.parse(keyword: "bind", value: "FN, X, exec, a", submap: "", location: here).diagnostics.first?.message == "FN works only with mouse and scroll binds")
         #expect(BindParser.parse(keyword: "bind", value: "ALT, X", submap: "", location: here).diagnostics.first?.message == "missing dispatcher")
+        for (keyword, value) in [("bindz", "ALT, X, exec, a"), ("bind", "ALT, nokey, exec, a"), ("bind", "MOD3, X, exec, a"),
+                                 ("bind", "FN, X, exec, a"), ("bind", "ALT, X")] {
+            let r = BindParser.parse(keyword: keyword, value: value, submap: "", location: here)
+            #expect(r.bind == nil)
+            #expect(r.diagnostics.map(\.isWarning) == [false], "\(keyword) \(value)")
+        }
     }
 
     @Test func unbind() {
         let u = BindParser.parseUnbind("SUPER, O")
         #expect(u?.0 == .command)
         #expect(u?.1 == .key(0x1F))
+    }
+
+    @Test func unbindAcceptsEmptyModifiers() {
+        for value in [", H", ",H"] {
+            let u = BindParser.parseUnbind(value)
+            #expect(u?.0 == [], "\(value)")
+            #expect(u?.1 == .key(0x04), "\(value)")
+        }
+        #expect(BindParser.parseUnbind("SUPER,") == nil)
+        #expect(BindParser.parseUnbind("") == nil)
     }
 }

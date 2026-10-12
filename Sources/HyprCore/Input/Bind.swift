@@ -69,7 +69,7 @@ public enum BindParser {
     }
 
     public static func parseUnbind(_ value: String) -> (Modifiers, BindTrigger)? {
-        let parts = value.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        let parts = value.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
         guard parts.count == 2, let mods = Modifiers.parse(parts[0]), let trigger = parseTrigger(parts[1]) else { return nil }
         return (mods, trigger)
     }

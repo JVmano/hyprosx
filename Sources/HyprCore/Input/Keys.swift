@@ -12,12 +12,11 @@ public struct Modifiers: OptionSet, Hashable, Codable, Sendable {
     private static let names: [(String, Modifiers)] = [
         ("COMMAND", .command), ("CONTROL", .control), ("OPTION", .option), ("SUPER", .command), ("SHIFT", .shift),
         ("LOGO", .command), ("MOD4", .command), ("MOD1", .option), ("CTRL", .control), ("WIN", .command),
-        ("CMD", .command), ("ALT", .option), ("OPT", .option), ("FN", .function),
+        ("CMD", .command), ("ALT", .option), ("OPT", .option), ("FN", .function), ("AND", []),
     ]
 
     public static func parse(_ s: String) -> Modifiers? {
-        let upper = s.uppercased().replacingOccurrences(of: " AND ", with: " ")
-        let chars = Array(upper)
+        let chars = Array(s.uppercased())
         var result: Modifiers = []
         var i = 0
         while i < chars.count {
