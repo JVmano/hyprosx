@@ -187,6 +187,17 @@ func allBounded(_ effects: [Effect], limit: Double = 1_000_000) -> Bool {
         #expect(w.pidRules[555] == nil)
     }
 
+    @Test func spawnRulesApplyToTheSpawnedPid() {
+        let w = world()
+        var token = 0
+        let r = w.run(.exec("kitty", rules: "float; workspace 2 silent", raw: false))
+        for case .spawn(_, let t?) in r.effects { token = t }
+        w.registerSpawn(token: token, pid: 555)
+        _ = w.handle(.windowAppeared(snap(9, app: "kitty", bundle: "net.kovidgoyal.kitty", pid: 555)))
+        #expect(w.windows[9]?.isFloating == true)
+        #expect(w.windows[9]?.workspace == 2)
+    }
+
     @Test func secondMonitorGetsItsOwnWorkspaceAndWindowsFollowTheMonitor() {
         let w = world("windowrule = workspace 2, match:class Term", monitors: [laptop, phl])
         #expect(w.activeWorkspace == [0: 1, 1: 2])

@@ -602,4 +602,19 @@ func twoWindows(_ text: String = "") -> World {
         _ = w.handle(.focusChanged(nil))
         #expect(w.focusedWindow == nil)
     }
+
+    @Test func focusOnAnIgnoredWindowClearsTheFocus() {
+        let w = world("windowrule = ignore on, match:class Raycast")
+        _ = w.handle(.windowAppeared(snap(1)))
+        _ = w.handle(.windowAppeared(snap(2, app: "Raycast", bundle: "com.raycast.macos", pid: 200)))
+        #expect(w.windows[2] == nil)
+        #expect(w.focusedWindow == 1)
+        _ = w.handle(.focusChanged(2))
+        #expect(w.focusedWindow == nil)
+        _ = w.handle(.focusChanged(1))
+        #expect(w.focusedWindow == 1)
+        _ = w.handle(.windowDisappeared(2))
+        _ = w.handle(.focusChanged(2))
+        #expect(w.focusedWindow == 1)
+    }
 }

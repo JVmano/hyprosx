@@ -150,7 +150,7 @@ extension World {
     }
 
     func nativeFocusChanged(_ id: WindowID?) {
-        if let id, windows[id] == nil { return }
+        if let id, windows[id] == nil, !ignored.contains(id) { return }
         guard let id, let w = windows[id], w.suspended == nil else {
             if focusedWindow != nil {
                 focusedWindow = nil

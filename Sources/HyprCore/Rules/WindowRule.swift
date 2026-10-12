@@ -6,7 +6,7 @@ public struct RuleRegex: Equatable, @unchecked Sendable {
     private let regex: NSRegularExpression
 
     public init?(_ raw: String) {
-        var p = raw.trimmingCharacters(in: .whitespaces)
+        var p = raw.trimmingCharacters(in: .whitespaces).precomposedStringWithCanonicalMapping
         let neg = p.hasPrefix("negative:")
         if neg { p = String(p.dropFirst("negative:".count)) }
         guard p.isEmpty || (try? NSRegularExpression(pattern: p)) != nil, let r = try? NSRegularExpression(pattern: "\\A(?:\(p))\\z", options: .useUnixLineSeparators) else { return nil }
@@ -16,7 +16,10 @@ public struct RuleRegex: Equatable, @unchecked Sendable {
     public func matches(_ s: String) -> Bool { matchesAny([s]) }
 
     public func matchesAny(_ values: [String]) -> Bool {
-        values.contains { regex.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil } != negative
+        values.contains { value in
+            let s = value.precomposedStringWithCanonicalMapping
+            return regex.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
+        } != negative
     }
 
     public static func == (a: RuleRegex, b: RuleRegex) -> Bool { a.pattern == b.pattern && a.negative == b.negative }
