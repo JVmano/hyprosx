@@ -30,8 +30,17 @@ public enum ConfigValue {
         return bool(v).map { $0 ? 1 : 0 }
     }
 
+    private static func finite<S: StringProtocol>(_ s: S) -> Double? {
+        Double(s).flatMap { $0.isFinite ? $0 : nil }
+    }
+
+    private static func finiteList(_ parts: [Substring]) -> [Double]? {
+        let numbers = parts.compactMap { finite($0) }
+        return numbers.count == parts.count ? numbers : nil
+    }
+
     public static func float(_ s: String) -> Double? {
-        Double(s.trimmingCharacters(in: .whitespaces))
+        finite(s.trimmingCharacters(in: .whitespaces))
     }
 
     public static func color(_ s: String) -> Color? {
@@ -42,10 +51,12 @@ public enum ConfigValue {
         for prefix in ["rgba(", "rgb("] where v.hasPrefix(prefix) && v.hasSuffix(")") {
             let inner = v.dropFirst(prefix.count).dropLast().replacingOccurrences(of: " ", with: "")
             if inner.contains(",") {
-                let parts = inner.split(separator: ",").compactMap { Double($0) }
-                if prefix == "rgba(" && parts.count == 4 { return Color(r: parts[0] / 255, g: parts[1] / 255, b: parts[2] / 255, a: parts[3]) }
-                if prefix == "rgb(" && parts.count == 3 { return Color(r: parts[0] / 255, g: parts[1] / 255, b: parts[2] / 255, a: 1) }
-                return nil
+                guard let parts = finiteList(inner.split(separator: ",", omittingEmptySubsequences: false)),
+                      parts.count == (prefix == "rgba(" ? 4 : 3),
+                      parts[0...2].allSatisfy({ (0...255).contains($0) }) else { return nil }
+                let alpha = prefix == "rgba(" ? parts[3] : 1
+                guard (0...1).contains(alpha) else { return nil }
+                return Color(r: parts[0] / 255, g: parts[1] / 255, b: parts[2] / 255, a: alpha)
             }
             guard let n = UInt32(inner, radix: 16) else { return nil }
             if prefix == "rgba(" && inner.count == 8 {
@@ -73,7 +84,7 @@ public enum ConfigValue {
         }
         if !token.isEmpty { tokens.append(token) }
         for t in tokens {
-            if t.hasSuffix("deg"), let d = Double(t.dropLast(3)) { angle = d; continue }
+            if t.hasSuffix("deg"), let d = finite(t.dropLast(3)) { angle = d; continue }
             guard let c = color(t) else { return nil }
             colors.append(c)
         }
@@ -81,14 +92,12 @@ public enum ConfigValue {
     }
 
     public static func vec2(_ s: String) -> (Double, Double)? {
-        let parts = s.split(whereSeparator: { $0 == " " || $0 == "," }).compactMap { Double($0) }
-        return parts.count == 2 ? (parts[0], parts[1]) : nil
+        guard let parts = finiteList(s.split(whereSeparator: { $0 == " " || $0 == "," })), parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
     }
 
     public static func edges(_ s: String) -> Edges? {
-        let raw = s.split(whereSeparator: { $0 == " " || $0 == "," })
-        let parts = raw.compactMap { Double($0) }
-        guard !parts.isEmpty, parts.count == raw.count, parts.count <= 4 else { return nil }
+        guard let parts = finiteList(s.split(whereSeparator: { $0 == " " || $0 == "," })), !parts.isEmpty, parts.count <= 4 else { return nil }
         return Edges(css: parts)
     }
 }
