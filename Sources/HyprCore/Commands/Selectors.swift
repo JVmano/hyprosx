@@ -28,8 +28,8 @@ public enum WorkspaceSelector: Equatable, Hashable, Sendable {
 
     public static func parse(_ s: String) -> WorkspaceSelector? {
         let v = s.trimmingCharacters(in: .whitespaces)
-        if let n = Int(v), !v.hasPrefix("+"), !v.hasPrefix("-") { return .id(n) }
-        if (v.hasPrefix("+") || v.hasPrefix("-")), let n = Int(v) { return .relative(n) }
+        if let n = boundedInt(v), !v.hasPrefix("+"), !v.hasPrefix("-") { return .id(n) }
+        if (v.hasPrefix("+") || v.hasPrefix("-")), let n = boundedInt(v) { return .relative(n) }
         if v.hasPrefix("name:") { return .name(String(v.dropFirst(5))) }
         if v == "special" { return .special(nil) }
         if v.hasPrefix("special:") { return .special(String(v.dropFirst(8))) }
@@ -45,7 +45,7 @@ public enum WorkspaceSelector: Equatable, Hashable, Sendable {
         guard v.count >= 3, let kind = v.first else { return nil }
         let sign = v[v.index(after: v.startIndex)]
         let digits = v.dropFirst(2)
-        guard let n = Int(digits), n >= 0 else { return nil }
+        guard let n = boundedInt(digits), n >= 0 else { return nil }
         switch (kind, sign) {
         case ("m", "+"): return .onMonitor(n, includeEmpty: false)
         case ("m", "-"): return .onMonitor(-n, includeEmpty: false)
@@ -108,14 +108,17 @@ public enum MonitorSelector: Equatable, Hashable, Sendable {
         if v.isEmpty { return nil }
         if let d = Direction.parse(v) { return .direction(d) }
         if v == "current" { return .current }
-        if (v.hasPrefix("+") || v.hasPrefix("-")), let n = Int(v) { return .relative(n) }
-        if let n = Int(v) { return .id(n) }
+        let unsigned = v.hasPrefix("+") || v.hasPrefix("-") ? v.dropFirst() : Substring(v)
+        if !unsigned.isEmpty, unsigned.allSatisfy({ $0.isASCII && $0.isNumber }) {
+            guard let n = boundedInt(v) else { return nil }
+            return unsigned.count < v.count ? .relative(n) : .id(n)
+        }
         return .name(v)
     }
 }
 
-func finiteDouble<S: StringProtocol>(_ s: S) -> Double? {
-    Double(s).flatMap { $0.isFinite ? $0 : nil }
+func boundedInt<S: StringProtocol>(_ s: S) -> Int? {
+    Int(s).flatMap { $0.magnitude <= UInt(Int32.max) ? $0 : nil }
 }
 
 public enum Measure: Equatable, Hashable, Sendable {

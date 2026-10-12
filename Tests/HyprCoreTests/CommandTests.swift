@@ -90,6 +90,55 @@ private func cmd(_ d: String, _ a: String = "") -> Command? { try? CommandParser
         #expect(cmd("movecursor", "10 20") == .moveCursor(10, 20))
     }
 
+    @Test func parsedIntegersAreBounded() {
+        for raw in ["9223372036854775807", "+9223372036854775807", "r+9223372036854775807", "e+9223372036854775807",
+                    "m-9223372036854775807", "e~9223372036854775807", "2147483648", "+2147483648"] {
+            #expect(WorkspaceSelector.parse(raw) == nil)
+        }
+        #expect(WorkspaceSelector.parse("2147483647") == .id(2147483647))
+        #expect(WorkspaceSelector.parse("-2147483647") == .relative(-2147483647))
+        #expect(WorkspaceSelector.parse("r+2147483647") == .onMonitor(2147483647, includeEmpty: true))
+        #expect(MonitorSelector.parse("+9223372036854775807") == nil)
+        #expect(MonitorSelector.parse("2147483648") == nil)
+        #expect(MonitorSelector.parse("-99999999999999999999") == nil)
+        #expect(MonitorSelector.parse("DP-1") == .name("DP-1"))
+        #expect(MonitorSelector.parse("2147483647") == .id(2147483647))
+        #expect(cmd("workspace", "+9223372036854775807") == nil)
+        #expect(cmd("focusmonitor", "+9223372036854775807") == nil)
+        #expect(cmd("renameworkspace", "9223372036854775807 x") == nil)
+        #expect(cmd("movecursortocorner", "9223372036854775807") == nil)
+    }
+
+    @Test func alterZOrderRejectsAWindowPart() {
+        #expect(cmd("alterzorder", "top") == .alterZOrder(top: true))
+        #expect(cmd("alterzorder", "bottom") == .alterZOrder(top: false))
+        #expect(CommandParser.parse(dispatcher: "alterzorder", arguments: "top,class:kitty") == .failure(CommandError("Invalid argument for alterzorder: top,class:kitty")))
+        #expect(cmd("alterzorder", "bottom,pid:9") == nil)
+    }
+
+    @Test func malformedFullscreenAndCenterArgumentsAreErrors() {
+        #expect(CommandParser.parse(dispatcher: "fullscreen", arguments: "set") == .failure(CommandError("Invalid argument for fullscreen: set")))
+        #expect(CommandParser.parse(dispatcher: "fullscreen", arguments: "banana") == .failure(CommandError("Invalid argument for fullscreen: banana")))
+        #expect(cmd("fullscreen", "1 banana") == nil)
+        #expect(cmd("fullscreen", "1 set extra") == nil)
+        #expect(cmd("fullscreen", "2") == nil)
+        #expect(cmd("fullscreen", "0") == .fullscreen(mode: 0, .toggle))
+        #expect(CommandParser.parse(dispatcher: "fullscreenstate", arguments: "1 1 banana") == .failure(CommandError("Invalid argument for fullscreenstate: 1 1 banana")))
+        #expect(cmd("fullscreenstate", "1 1 set") == .fullscreen(mode: 1, .set))
+        #expect(cmd("fullscreenstate", "0 0") == .fullscreen(mode: 0, .unset))
+        #expect(cmd("centerwindow") == .centerWindow)
+        #expect(cmd("centerwindow", "1") == .centerWindow)
+        #expect(CommandParser.parse(dispatcher: "centerwindow", arguments: "banana") == .failure(CommandError("Invalid argument for centerwindow: banana")))
+        #expect(cmd("centerwindow", "2") == nil)
+    }
+
+    @Test func unsupportedKeepsInjectionDispatchersOut() {
+        #expect(cmd("pass", "class:kitty") == .unsupported("pass"))
+        #expect(cmd("sendkeystate", "SUPER, A, down, class:x") == .unsupported("sendkeystate"))
+        #expect(cmd("SENDSHORTCUT", "SUPER, F4") == .unsupported("sendshortcut"))
+        #expect(cmd("EXEC", " ls ") == .exec("ls", rules: nil, raw: false))
+    }
+
     @Test func unsupportedAndUnknown() {
         #expect(cmd("sendshortcut", "SUPER, F4") == .unsupported("sendshortcut"))
         #expect(cmd("togglegroup") == .unsupported("togglegroup"))

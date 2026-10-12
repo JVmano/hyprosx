@@ -109,13 +109,14 @@ public enum CommandParser {
             let action: ToggleAction = name == "togglefloating" ? .toggle : (name == "setfloating" ? .set : .unset)
             return WindowSelector.parse(args).map { .floating(action, $0) }
         case "fullscreen":
-            let mode = words.first.flatMap { Int($0) } ?? 0
+            guard words.count <= 2 else { return nil }
+            let mode = words.isEmpty ? 0 : boundedInt(words[0])
             let action = words.count > 1 ? ToggleAction(rawValue: words[1]) : .toggle
-            guard mode == 0 || mode == 1, let action else { return nil }
+            guard let mode, mode == 0 || mode == 1, let action else { return nil }
             return .fullscreen(mode: mode, action)
         case "fullscreenstate":
-            guard words.count >= 2, let a = Int(words[0]), let b = Int(words[1]) else { return nil }
-            let action = words.count > 2 ? (ToggleAction(rawValue: words[2]) ?? .toggle) : .toggle
+            guard (2...3).contains(words.count), let a = boundedInt(words[0]), let b = boundedInt(words[1]) else { return nil }
+            guard let action = words.count > 2 ? ToggleAction(rawValue: words[2]) : .toggle else { return nil }
             let top = max(a, b)
             if top >= 2 { return .fullscreen(mode: 0, action) }
             if top == 1 { return .fullscreen(mode: 1, action) }
@@ -133,7 +134,7 @@ public enum CommandParser {
         case "swapwindow":
             if let d = Direction.parse(args) { return .swapWindow(.direction(d)) }
             return args.isEmpty ? nil : WindowSelector.parse(args).map { .swapWindow(.window($0)) }
-        case "centerwindow": return .centerWindow
+        case "centerwindow": return args.isEmpty || args == "1" ? .centerWindow : nil
         case "resizeactive": return ResizeParam.parse(args).map { .resizeActive($0) }
         case "moveactive": return ResizeParam.parse(args).map { .moveActive($0) }
         case "resizewindowpixel", "movewindowpixel":
@@ -170,16 +171,17 @@ public enum CommandParser {
             return .swapActiveWorkspaces(a, b)
         case "togglespecialworkspace": return .toggleSpecialWorkspace(args.isEmpty ? nil : args)
         case "renameworkspace":
-            guard let first = words.first, let id = Int(first) else { return nil }
+            guard let first = words.first, let id = boundedInt(first) else { return nil }
             return .renameWorkspace(id, words.dropFirst().joined(separator: " "))
         case "layoutmsg": return args.isEmpty ? nil : .layoutMessage(args)
         case "splitratio": return FloatValue.parse(args) == nil ? nil : .layoutMessage("splitratio \(args)")
         case "submap": return args.isEmpty ? nil : .submap(args)
         case "alterzorder":
-            let (z, _) = splitComma(args)
+            let (z, window) = splitComma(args)
+            guard window?.isEmpty ?? true else { return nil }
             return z == "top" ? .alterZOrder(top: true) : (z == "bottom" ? .alterZOrder(top: false) : nil)
         case "bringactivetotop": return .alterZOrder(top: true)
-        case "movecursortocorner": return Int(args).flatMap { (0...3).contains($0) ? .moveCursorToCorner($0) : nil }
+        case "movecursortocorner": return boundedInt(args).flatMap { (0...3).contains($0) ? .moveCursorToCorner($0) : nil }
         case "movecursor":
             guard words.count == 2, let x = finiteDouble(words[0]), let y = finiteDouble(words[1]) else { return nil }
             return .moveCursor(x, y)

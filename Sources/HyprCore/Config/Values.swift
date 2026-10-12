@@ -1,5 +1,9 @@
 import Foundation
 
+func finiteDouble<S: StringProtocol>(_ s: S) -> Double? {
+    Double(s).flatMap { $0.isFinite ? $0 : nil }
+}
+
 public struct Color: Equatable, Hashable, Codable, Sendable {
     public var r: Double, g: Double, b: Double, a: Double
     public init(r: Double, g: Double, b: Double, a: Double) { self.r = r; self.g = g; self.b = b; self.a = a }
@@ -30,17 +34,13 @@ public enum ConfigValue {
         return bool(v).map { $0 ? 1 : 0 }
     }
 
-    private static func finite<S: StringProtocol>(_ s: S) -> Double? {
-        Double(s).flatMap { $0.isFinite ? $0 : nil }
-    }
-
     private static func finiteList(_ parts: [Substring]) -> [Double]? {
-        let numbers = parts.compactMap { finite($0) }
+        let numbers = parts.compactMap { finiteDouble($0) }
         return numbers.count == parts.count ? numbers : nil
     }
 
     public static func float(_ s: String) -> Double? {
-        finite(s.trimmingCharacters(in: .whitespaces))
+        finiteDouble(s.trimmingCharacters(in: .whitespaces))
     }
 
     public static func color(_ s: String) -> Color? {
@@ -84,7 +84,7 @@ public enum ConfigValue {
         }
         if !token.isEmpty { tokens.append(token) }
         for t in tokens {
-            if t.hasSuffix("deg"), let d = finite(t.dropLast(3)) { angle = d; continue }
+            if t.hasSuffix("deg"), let d = finiteDouble(t.dropLast(3)) { angle = d; continue }
             guard let c = color(t) else { return nil }
             colors.append(c)
         }
