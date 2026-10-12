@@ -32,6 +32,20 @@ public struct MasterLayout: TiledLayout, Equatable, Codable, Sendable {
 
     static func masterShare(_ v: Double) -> Double { clamped(v, 0.05, 0.95, fallback: 0.55) }
 
+    func effectiveOrientation(_ ctx: LayoutContext) -> (name: String, centered: Bool) {
+        let stored = orientation(ctx)
+        guard stored == "center" else { return (stored, false) }
+        let slaveCount = nodes.filter { !$0.isMaster }.count
+        return slaveCount >= ctx.master.slaveCountForCenterMaster ? (stored, true) : (ctx.master.centerMasterFallback, false)
+    }
+
+    static func centerColumns(_ slaves: [Node], startRight: Bool) -> (left: [Node], right: [Node]) {
+        var onRight = startRight
+        var left: [Node] = [], right: [Node] = []
+        for n in slaves { if onRight { right.append(n) } else { left.append(n) }; onRight.toggle() }
+        return (left, right)
+    }
+
     static func distribute(_ group: [Node], total: Double, smart: Bool) -> [Double] {
         guard !group.isEmpty else { return [] }
         if smart {
@@ -59,11 +73,7 @@ public struct MasterLayout: TiledLayout, Equatable, Codable, Sendable {
         let slaves = nodes.filter { !$0.isMaster }
         let smart = ctx.master.smartResizing
         let stored = orientation(ctx)
-        var orient = stored
-        var centerMaster = false
-        if orient == "center" {
-            if slaves.count >= ctx.master.slaveCountForCenterMaster { centerMaster = true } else { orient = ctx.master.centerMasterFallback }
-        }
+        let (orient, centerMaster) = effectiveOrientation(ctx)
         var out: [WindowID: Rect] = [:]
         if nodes.count == 1 && !centerMaster {
             let n = nodes[0]
@@ -104,10 +114,8 @@ public struct MasterLayout: TiledLayout, Equatable, Codable, Sendable {
             }
         case _ where centerMaster:
             let colW = (W - masterW) / 2
-            var onRight = ctx.master.centerMasterFallback == "right"
-            var left: [Node] = [], right: [Node] = []
-            for n in slaves { if onRight { right.append(n) } else { left.append(n) }; onRight.toggle() }
-            for (column, x) in [(left, 0.0), (right, colW + masterW)] {
+            let columns = MasterLayout.centerColumns(slaves, startRight: ctx.master.centerMasterFallback == "right")
+            for (column, x) in [(columns.left, 0.0), (columns.right, colW + masterW)] {
                 var y = 0.0
                 for (n, h) in zip(column, MasterLayout.distribute(column, total: H, smart: smart)) {
                     out[n.window] = Rect(x: wa.x + x, y: wa.y + y, width: colW, height: h)
@@ -183,14 +191,14 @@ public struct MasterLayout: TiledLayout, Equatable, Codable, Sendable {
         guard let i = index(of: id) else { return }
         let wa = ctx.workArea
         guard wa.width > 0, wa.height > 0 else { return }
-        let orient = orientation(ctx)
+        let (orient, centered) = effectiveOrientation(ctx)
         let vertical = orient == "top" || orient == "bottom"
         let masterDelta: Double
         switch orient {
         case "right": masterDelta = -delta.x / wa.width
         case "top": masterDelta = delta.y / wa.height
         case "bottom": masterDelta = -delta.y / wa.height
-        default: masterDelta = delta.x / wa.width
+        default: masterDelta = (centered ? 2 : 1) * delta.x / wa.width
         }
         if masterDelta != 0 {
             for k in nodes.indices where nodes[k].isMaster {
@@ -199,7 +207,12 @@ public struct MasterLayout: TiledLayout, Equatable, Codable, Sendable {
         }
         let stackDelta = vertical ? delta.x : delta.y
         guard stackDelta != 0 else { return }
-        let column = nodes.filter { $0.isMaster == nodes[i].isMaster }.count
+        let group = nodes.filter { $0.isMaster == nodes[i].isMaster }
+        var column = group.count
+        if centered && !nodes[i].isMaster {
+            let columns = MasterLayout.centerColumns(group, startRight: ctx.master.centerMasterFallback == "right")
+            column = columns.left.contains { $0.window == id } ? columns.left.count : columns.right.count
+        }
         let extent = vertical ? wa.width : wa.height
         let unit = extent / Double(max(column, 1))
         nodes[i].percSize = MasterLayout.clamped(nodes[i].percSize + stackDelta / unit, 0.05, 1.95, fallback: nodes[i].percSize)
@@ -257,7 +270,8 @@ public struct MasterLayout: TiledLayout, Equatable, Codable, Sendable {
             let exact = args.first == "exact"
             guard let v = (exact ? args.dropFirst().first : args.first).flatMap(Double.init), v.isFinite,
                   let m = nodes.firstIndex(where: \.isMaster) else { return .error("invalid mfact") }
-            nodes[m].percMaster = MasterLayout.clamped(exact ? v : nodes[m].percMaster + v, 0.05, 0.95, fallback: nodes[m].percMaster)
+            let share = MasterLayout.clamped(exact ? v : nodes[m].percMaster + v, 0.05, 0.95, fallback: nodes[m].percMaster)
+            for k in nodes.indices where nodes[k].isMaster { nodes[k].percMaster = share }
             return .ok
         }
         guard let focused = ctx.focused, let fi = index(of: focused) else { return .error("no focused tiled window") }
@@ -305,10 +319,14 @@ public struct MasterLayout: TiledLayout, Equatable, Codable, Sendable {
             let newMaster = nodes[s].window
             nodes[s].isMaster = true
             nodes[s].percMaster = nodes[m].percMaster
-            var old = nodes[m]
-            old.isMaster = false
-            nodes.remove(at: m)
-            if command == "rollnext" { nodes.append(old) } else { nodes.insert(old, at: 0) }
+            nodes[m].isMaster = false
+            if command == "rollnext" {
+                let old = nodes.remove(at: m)
+                nodes.append(old)
+            } else {
+                let promoted = nodes.remove(at: s)
+                nodes.insert(promoted, at: 0)
+            }
             return .focus(newMaster)
         default:
             return .error("unknown master layout message '\(command)'")

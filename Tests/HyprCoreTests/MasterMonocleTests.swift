@@ -130,13 +130,83 @@ private func finiteAndInside(_ boxes: [WindowID: Rect]) -> Bool {
     @Test func rollPrev() {
         var m = master(3)
         #expect(m.message("rollprev", mctx(1)) == .focus(3))
-        #expect(m.windowIDs == [1, 2, 3])
+        #expect(m.windowIDs == [3, 1, 2])
         let b = m.tileBoxes(mctx())
         #expect(b[3] == Rect(x: 0, y: 0, width: 550, height: 600))
         #expect(b[1] == Rect(x: 550, y: 0, width: 450, height: 300))
+        #expect(b[2] == Rect(x: 550, y: 300, width: 450, height: 300))
         #expect(m.message("rollnext", mctx(3)) == .focus(1))
         #expect(m.windowIDs == [1, 2, 3])
         #expect(m.tileBoxes(mctx())[1] == Rect(x: 0, y: 0, width: 550, height: 600))
+    }
+
+    @Test func rollNextThenRollPrevRestoresTheOrder() {
+        var m = master(4)
+        #expect(m.message("rollnext", mctx(1)) == .focus(2))
+        #expect(m.windowIDs == [2, 3, 4, 1])
+        #expect(m.message("rollprev", mctx(2)) == .focus(1))
+        #expect(m.windowIDs == [1, 2, 3, 4])
+        #expect(m.tileBoxes(mctx())[1] == Rect(x: 0, y: 0, width: 550, height: 600))
+        #expect(m.message("rollprev", mctx(1)) == .focus(4))
+        #expect(m.message("rollnext", mctx(4)) == .focus(1))
+        #expect(m.windowIDs == [1, 2, 3, 4])
+    }
+
+    @Test func centerMasterResizeDoublesTheMasterDelta() {
+        let center: (inout MasterOptions) -> Void = { $0.orientation = "center" }
+        var m = master(3)
+        m.resize(1, by: Point(x: 100, y: 0), corner: .none, mctx(1, center))
+        #expect(abs((m.tileBoxes(mctx(nil, center))[1]?.width ?? 0) - 750) < 1e-9)
+        var few = master(2)
+        few.resize(1, by: Point(x: 100, y: 0), corner: .none, mctx(1, center))
+        #expect(abs((few.tileBoxes(mctx(nil, center))[1]?.width ?? 0) - 650) < 1e-9)
+    }
+
+    @Test func resizeFollowsTheCenterFallbackOrientation() {
+        let right: (inout MasterOptions) -> Void = { $0.orientation = "center"; $0.centerMasterFallback = "right" }
+        var m = master(2)
+        m.resize(1, by: Point(x: 100, y: 0), corner: .none, mctx(1, right))
+        let b = m.tileBoxes(mctx(nil, right))
+        #expect(abs((b[1]?.width ?? 0) - 450) < 1e-9)
+        #expect(abs((b[1]?.minX ?? 0) - 550) < 1e-9)
+        let top: (inout MasterOptions) -> Void = { $0.orientation = "center"; $0.centerMasterFallback = "top" }
+        var t = master(2)
+        t.resize(1, by: Point(x: 0, y: 60), corner: .none, mctx(1, top))
+        #expect(abs((t.tileBoxes(mctx(nil, top))[1]?.height ?? 0) - 390) < 1e-9)
+    }
+
+    @Test func centerColumnResizeUsesTheNodesInItsOwnColumn() {
+        let center: (inout MasterOptions) -> Void = { $0.orientation = "center" }
+        var m = master(5)
+        m.resize(2, by: Point(x: 0, y: 150), corner: .none, mctx(2, center))
+        let b = m.tileBoxes(mctx(nil, center))
+        #expect(b[1] == Rect(x: 225, y: 0, width: 550, height: 600))
+        #expect(b[2] == Rect(x: 0, y: 0, width: 225, height: 360))
+        #expect(b[4] == Rect(x: 0, y: 360, width: 225, height: 240))
+        #expect(b[3] == Rect(x: 775, y: 0, width: 225, height: 300))
+        #expect(b[5] == Rect(x: 775, y: 300, width: 225, height: 300))
+    }
+
+    @Test func centerColumnResizeFollowsTheFallbackStartingSide() {
+        let right: (inout MasterOptions) -> Void = { $0.orientation = "center"; $0.centerMasterFallback = "right" }
+        var m = master(4)
+        m.resize(4, by: Point(x: 0, y: 150), corner: .none, mctx(4, right))
+        let b = m.tileBoxes(mctx(nil, right))
+        #expect(b[2] == Rect(x: 775, y: 0, width: 225, height: 240))
+        #expect(b[4] == Rect(x: 775, y: 240, width: 225, height: 360))
+        #expect(b[3] == Rect(x: 0, y: 0, width: 225, height: 600))
+    }
+
+    @Test func mfactMessageWritesEveryMaster() {
+        var m = master(3)
+        #expect(m.message("addmaster", mctx(2)) == .ok)
+        #expect(m.message("mfact exact 0.7", mctx(1)) == .ok)
+        #expect(m.message("removemaster", mctx(1)) == .ok)
+        #expect(m.tileBoxes(mctx())[2]?.width == 700)
+        #expect(m.message("addmaster", mctx(3)) == .ok)
+        #expect(m.message("mfact 0.1", mctx(2)) == .ok)
+        #expect(m.message("removemaster", mctx(2)) == .ok)
+        #expect(abs((m.tileBoxes(mctx())[3]?.width ?? 0) - 800) < 1e-9)
     }
 
     @Test func extremeOptionsKeepBoxesFinite() {
