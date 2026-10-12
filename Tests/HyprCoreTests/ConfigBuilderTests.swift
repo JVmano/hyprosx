@@ -245,4 +245,82 @@ private func build(_ text: String, files: [String: String] = [:]) -> (config: Co
         let r = build("monitor = DP-1, addreserved, 1, 2, 3, 4")
         #expect(r.config.reservedAreas["DP-1"] == Edges(top: 1, right: 4, bottom: 2, left: 3))
     }
+
+
+    @Test func ipcSecurityDefaultsArePinned() {
+        let c = Config()
+        #expect(c.macos.ipcExec == false)
+        #expect(c.macos.ipcWindowTitles == true)
+        let r = build("macos:ipc_exec = maybe")
+        #expect(r.diagnostics.map(\.message) == ["invalid value 'maybe' for macos:ipc_exec"])
+        #expect(r.config.macos.ipcExec == false)
+        var d = Config()
+        #expect(ConfigBuilder.applyKeyword("macos:ipc_exec", "maybe", to: &d) == "invalid value 'maybe' for macos:ipc_exec")
+        #expect(d.macos.ipcExec == false)
+    }
+
+    @Test func ipcExecAcceptsOnlyExactBooleanWords() {
+        for word in ["true", "yes", "on", "1", "TRUE", "Yes", "ON"] {
+            var c = Config()
+            #expect(ConfigBuilder.applyKeyword("macos:ipc_exec", word, to: &c) == nil)
+            #expect(c.macos.ipcExec, "\(word) should enable")
+        }
+        for word in ["false", "no", "off", "0", "FALSE", "No", "Off"] {
+            var c = Config()
+            c.macos.ipcExec = true
+            #expect(ConfigBuilder.applyKeyword("macos:ipc_exec", word, to: &c) == nil)
+            #expect(c.macos.ipcExec == false, "\(word) should disable")
+        }
+        for word in ["online", "yes please", "truely", "nope", "2", "-1", "1.0", ""] {
+            var c = Config()
+            #expect(ConfigBuilder.applyKeyword("macos:ipc_exec", word, to: &c) == "invalid value '\(word)' for macos:ipc_exec")
+            #expect(c.macos.ipcExec == false, "\(word) must not enable")
+        }
+    }
+
+    @Test func execAndEnvKeywordsAreTopLevelOnly() {
+        let r = build("""
+        exec = top
+        exec-once = once
+        env = A,B
+        plugin:x:exec = cmd
+        device:exec = cmd
+        decoration:blur:bind = ALT, X, exec, true
+        plugin {
+            x {
+                exec-once = nested
+                bind = ALT, Y, exec, true
+            }
+        }
+        device {
+            name = mouse
+            env = C,D
+            workspace = 1
+        }
+        general:exec-shutdown = cmd
+        general:env = E,F
+        """)
+        #expect(r.config.exec == [ExecCommand(command: "top", raw: false)])
+        #expect(r.config.execOnce == [ExecCommand(command: "once", raw: false)])
+        #expect(r.config.environment == [EnvVar(name: "A", value: "B")])
+        #expect(r.config.execShutdown.isEmpty)
+        #expect(r.config.binds.isEmpty)
+        #expect(r.config.workspaceRules.isEmpty)
+        #expect(r.diagnostics.map(\.message) == ["config option general:exec-shutdown does not exist.", "config option general:env does not exist."])
+        var c = Config()
+        #expect(ConfigBuilder.applyKeyword("plugin:x:exec", "cmd", to: &c) == nil)
+        #expect(ConfigBuilder.applyKeyword("device:exec", "cmd", to: &c) == nil)
+        #expect(c.exec.isEmpty)
+        #expect(ConfigBuilder.applyKeyword("exec", "cmd", to: &c) == nil)
+        #expect(c.exec == [ExecCommand(command: "cmd", raw: false)])
+    }
+
+    @Test func windowRuleWithOneBadEffectIsDroppedWithADiagnostic() {
+        let r = build("windowrule = float on, border_size abc, match:class kitty\nwindowrule = float on, match:class ok")
+        #expect(r.diagnostics.map(\.message) == ["invalid border_size 'abc'"])
+        #expect(r.config.windowRules.count == 1)
+        let b = build("windowrule {\n name = bad\n match:class = kitty\n border_size = abc\n}")
+        #expect(b.diagnostics.map(\.message) == ["invalid border_size 'abc'"])
+        #expect(b.config.windowRules.count == 0)
+    }
 }

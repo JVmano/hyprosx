@@ -39,6 +39,7 @@ public struct Config: Equatable, Sendable {
 
 public enum ConfigBuilder {
     static let acceptedKeywords: Set<String> = ["envd", "plugin", "gesture", "device", "permission", "layerrule", "monitorv2"]
+    static let topLevelOnlyKeywords: Set<String> = ["exec", "execr", "exec-once", "execr-once", "exec-shutdown", "env"]
 
     struct Builder {
         var config: Config
@@ -52,6 +53,11 @@ public enum ConfigBuilder {
                 return
             }
             let name = key.split(separator: ":").last.map(String.init) ?? key
+            if OptionRegistry.isIgnored(key) { return }
+            if key != name, ConfigBuilder.topLevelOnlyKeywords.contains(name) {
+                diagnostics.append(Diagnostic(location, "config option \(key) does not exist."))
+                return
+            }
             if name.hasPrefix("bind"), name.dropFirst(4).allSatisfy({ $0.isASCII && $0.isLowercase }) {
                 let r = BindParser.parse(keyword: name, value: value, submap: submap, location: location)
                 if let b = r.bind { config.binds.append(b) }
@@ -99,7 +105,7 @@ public enum ConfigBuilder {
                 config.environment.append(EnvVar(name: value[..<comma].trimmingCharacters(in: .whitespaces),
                                                  value: value[value.index(after: comma)...].trimmingCharacters(in: .whitespaces)))
             default:
-                if ConfigBuilder.acceptedKeywords.contains(name) || OptionRegistry.isIgnored(key) || !key.contains(":") { return }
+                if ConfigBuilder.acceptedKeywords.contains(name) || !key.contains(":") { return }
                 diagnostics.append(Diagnostic(location, "config option \(key) does not exist."))
             }
         }

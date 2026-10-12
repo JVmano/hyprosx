@@ -131,6 +131,16 @@ enum OptionRegistry {
             s[k] = OptionSpec(set: { c, v in guard let b = ConfigValue.bool(v) else { return invalid(v, k) }; c[keyPath: p] = b; return nil },
                               get: { $0[keyPath: p] ? "true" : "false" })
         }
+        func strictBool(_ k: String, _ p: WritableKeyPath<Config, Bool>) {
+            s[k] = OptionSpec(set: { c, v in
+                switch v.trimmingCharacters(in: .whitespaces).lowercased() {
+                case "true", "yes", "on", "1": c[keyPath: p] = true
+                case "false", "no", "off", "0": c[keyPath: p] = false
+                default: return invalid(v, k)
+                }
+                return nil
+            }, get: { $0[keyPath: p] ? "true" : "false" })
+        }
         func float(_ k: String, _ p: WritableKeyPath<Config, Double>) {
             s[k] = OptionSpec(set: { c, v in guard let d = ConfigValue.float(v) else { return invalid(v, k) }; c[keyPath: p] = d; return nil },
                               get: { String($0[keyPath: p]) })
@@ -218,7 +228,7 @@ enum OptionRegistry {
         bool("macos:respect_reduce_motion", \.macos.respectReduceMotion)
         float("macos:live_resize_max_latency", \.macos.liveResizeMaxLatency)
         int("macos:border_radius", \.macos.borderRadius)
-        bool("macos:ipc_exec", \.macos.ipcExec)
+        strictBool("macos:ipc_exec", \.macos.ipcExec)
         bool("macos:ipc_window_titles", \.macos.ipcWindowTitles)
         return s
     }()
