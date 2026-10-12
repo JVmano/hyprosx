@@ -161,3 +161,65 @@ private func facts(bundle: String = "com.mitchellh.ghostty", app: String = "Ghos
         #expect(rule("float on, match:xwayland false, match:class x")?.matchers.count == 1)
     }
 }
+
+@Suite struct WindowRuleSplitAndAnchorTests {
+    private func parsed(_ v: String, keyword: String = "windowrule") -> (rule: WindowRule?, diagnostics: [Diagnostic]) {
+        WindowRuleParser.parse(keyword: keyword, value: v, location: here)
+    }
+
+    @Test func commasInsideBracketsDoNotSplit() {
+        let color = parsed("border_color rgb(255,0,0), match:class x")
+        #expect(color.diagnostics.isEmpty)
+        #expect(color.rule?.effects == [.borderColor(active: Gradient(Color(r: 1, g: 0, b: 0, a: 1)), inactive: nil)])
+        let quantifier = parsed("float on, match:title a{1,3}")
+        #expect(quantifier.diagnostics.isEmpty)
+        #expect(quantifier.rule.map { RuleEngine.matches($0, facts(title: "aa")) } == true)
+        #expect(quantifier.rule.map { RuleEngine.matches($0, facts(title: "aaaa")) } == false)
+        let legacy = parsed("float, class:^(a,b)$", keyword: "windowrulev2")
+        #expect(legacy.diagnostics.isEmpty)
+        #expect(legacy.rule.map { RuleEngine.matches($0, facts(bundle: "a,b", app: "x")) } == true)
+        let set = parsed("float on, match:title [(,], match:class x")
+        #expect(set.diagnostics.isEmpty)
+        #expect(set.rule?.matchers.count == 2)
+    }
+
+    @Test func escapedBracketsDoNotCount() {
+        let r = parsed("match:class a\\(b, float on, match:title c\\)d")
+        #expect(r.diagnostics.isEmpty)
+        #expect(r.rule?.matchers.count == 2)
+        #expect(r.rule?.effects == [.float(true)])
+    }
+
+    @Test func unbalancedBracketsFallBackToPlainSplit() {
+        let r = parsed("float on, match:class (x, match:title y")
+        #expect(r.rule == nil)
+        #expect(r.diagnostics.first?.message == "invalid regex '(x'")
+        #expect(parsed("float on, match:class x), match:title y").diagnostics.first?.message == "invalid regex 'x)'")
+    }
+
+    @Test func fullMatchIsStrictAboutTrailingLineTerminators() {
+        let kitty = RuleRegex("kitty")!
+        #expect(kitty.matches("kitty"))
+        #expect(!kitty.matches("kitty\n"))
+        #expect(!kitty.matches("kitty\u{2028}"))
+        #expect(!kitty.matches("\nkitty"))
+        let t = rule("float on, match:title kitty")!
+        #expect(!RuleEngine.matches(t, facts(title: "kitty\n")))
+        #expect(!RuleEngine.matches(t, facts(title: "kitty\u{2028}")))
+        #expect(RuleRegex(".*")!.matches("a\u{2028}b"))
+        #expect(!RuleRegex(".*")!.matches("a\nb"))
+    }
+
+    @Test func literalPatternsMatchSpecialCharacterTitles() {
+        func hits(_ pattern: String, _ title: String) -> Bool { RuleEngine.matches(rule("float on, match:title \(pattern)")!, facts(title: title)) }
+        #expect(hits("🎉", "🎉"))
+        #expect(!hits("🎉", "🎉🎉"))
+        #expect(hits("a\\\\b", "a\\b"))
+        #expect(!hits("a\\\\b", "ab"))
+        #expect(hits("\"q\"", "\"q\""))
+        #expect(!hits("\"q\"", "q"))
+        #expect(hits("[日本]+語", "日本語"))
+        #expect(hits("[日本]+語", "日語"))
+        #expect(!hits("[日本]+語", "語"))
+    }
+}

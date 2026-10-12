@@ -9,7 +9,7 @@ public struct RuleRegex: Equatable, @unchecked Sendable {
         var p = raw.trimmingCharacters(in: .whitespaces)
         let neg = p.hasPrefix("negative:")
         if neg { p = String(p.dropFirst("negative:".count)) }
-        guard p.isEmpty || (try? NSRegularExpression(pattern: p)) != nil, let r = try? NSRegularExpression(pattern: "^(?:\(p))$") else { return nil }
+        guard p.isEmpty || (try? NSRegularExpression(pattern: p)) != nil, let r = try? NSRegularExpression(pattern: "\\A(?:\(p))\\z", options: .useUnixLineSeparators) else { return nil }
         pattern = p; negative = neg; regex = r
     }
 
@@ -197,6 +197,33 @@ public enum WindowRuleParser {
         return (active, inactive)
     }
 
+    static func splitRuleParts(_ s: String) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        var closers: [Character] = []
+        var balanced = true
+        var escaped = false
+        for ch in s {
+            if escaped { current.append(ch); escaped = false; continue }
+            if ch == "\\" { current.append(ch); escaped = true; continue }
+            if closers.last == "]" {
+                if ch == "]" { closers.removeLast() }
+            } else {
+                switch ch {
+                case "(": closers.append(")")
+                case "[": closers.append("]")
+                case "{": closers.append("}")
+                case ")", "]", "}": if closers.last == ch { closers.removeLast() } else { balanced = false }
+                default: break
+                }
+            }
+            if ch == "," && closers.isEmpty { parts.append(current); current = "" } else { current.append(ch) }
+        }
+        parts.append(current)
+        if !balanced || !closers.isEmpty { parts = s.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
+        return parts.filter { !$0.isEmpty }.map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
     private static func splitFirstSpace(_ s: String) -> (String, String) {
         let t = s.trimmingCharacters(in: .whitespaces)
         guard let i = t.firstIndex(of: " ") else { return (t, "") }
@@ -205,7 +232,7 @@ public enum WindowRuleParser {
 
     public static func parse(keyword: String, value: String, location: SourceLocation) -> (rule: WindowRule?, diagnostics: [Diagnostic]) {
         var b = Builder(location: location)
-        let parts = value.split(separator: ",", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
+        let parts = splitRuleParts(value)
         if keyword == "windowrule" && parts.contains(where: { $0.hasPrefix("match:") }) {
             for part in parts {
                 if part.hasPrefix("match:") {
