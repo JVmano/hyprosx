@@ -47,7 +47,18 @@ public final class World {
         case .monitorsChanged(let infos): setMonitors(infos)
         case .windowAppeared(let s): addWindow(s)
         case .windowDisappeared(let id): removeWindow(id)
-        default: break
+        case .windowSuspended(let id, let reason): suspend(id, reason)
+        case .windowResumed(let id): resume(id)
+        case .appHidden(let pid, let byUser): appHidden(pid, byUser: byUser)
+        case .appUnhidden(let pid):
+            for id in windowIDs(ofApp: pid) where windows[id]?.suspended == .appHidden { resume(id) }
+        case .appTerminated(let pid):
+            for id in windowIDs(ofApp: pid) { removeWindow(id) }
+        case .windowTitleChanged(let id, let title, let early): retitle(id, title, early: early)
+        case .windowFrameChanged(let id, let frame, let userDriven): frameChanged(id, frame, userDriven: userDriven)
+        case .dragEnded(let point): endDrag(at: point)
+        case .focusChanged(let id): nativeFocusChanged(id)
+        case .cursorMoved(let point): cursorMoved(point)
         }
     }
 
@@ -196,6 +207,7 @@ public final class World {
                     if w.isParked || stale {
                         changes.append(FrameChange(id: id, frame: frame, reason: id == opened ? .open : reason))
                         w.appliedFrame = frame
+                        w.refitTarget = nil
                         w.isParked = false
                         windows[id] = w
                     }
@@ -344,6 +356,7 @@ public final class World {
             lastActiveByMonitorName[m.name] = chosen
         }
         if !ids.contains(focusedMonitor) { focusedMonitor = primary }
+        settleFocus()
         if layoutChanged {
             for (id, w) in windows where w.isParked && !isVisible(w.workspace) { windows[id]?.isParked = false }
         }
@@ -399,7 +412,9 @@ public final class World {
         windows[s.id] = w
         pidRules[s.pid] = nil
         attach(s.id, to: target)
-        if !isVisible(target) && !silent && outcome.workspace != nil { showWorkspace(target) }
+        if !isVisible(target) && !silent && outcome.workspace != nil {
+            if workspaces[target]?.isSpecial == true { toggleSpecial(target, show: true, emitFocus: false) } else { switchWorkspace(target, emitFocus: false) }
+        }
         refresh([target], opened: s.id)
         if isVisible(target) && !outcome.noInitialFocus {
             focusWindow(s.id, warp: false, emitEffect: true)
@@ -408,20 +423,6 @@ public final class World {
         }
         emit(.statusChanged)
         emit(.saveState)
-    }
-
-    func showWorkspace(_ id: Int) {
-        guard let ws = workspaces[id] else { return }
-        if ws.isSpecial {
-            let old = activeSpecial[ws.monitor]
-            activeSpecial[ws.monitor] = id
-            if let old, old != id { refresh([old]) }
-        } else {
-            let old = activeWorkspace[ws.monitor]
-            activeWorkspace[ws.monitor] = id
-            if let name = monitor(ws.monitor)?.name { lastActiveByMonitorName[name] = id }
-            if let old, old != id { refresh([old]) }
-        }
     }
 
     func focusCandidate(onWorkspace wsID: Int, near point: Point) -> WindowID? {
@@ -447,6 +448,10 @@ public final class World {
         detach(id)
         windows[id] = nil
         focusHistory.removeAll { $0 == id }
+        if dragging == id {
+            dragging = nil
+            dragIsResize = false
+        }
         if focusedWindow == id {
             focusedWindow = nil
             if isVisible(w.workspace), let next = focusCandidate(onWorkspace: w.workspace, near: center) {
@@ -455,6 +460,7 @@ public final class World {
         }
         refresh([w.workspace])
         destroyIfUnused(w.workspace)
+        closeSpecialIfEmpty(w.workspace)
         emit(.statusChanged)
         emit(.saveState)
     }
