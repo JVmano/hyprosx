@@ -124,7 +124,7 @@ When macOS focuses a window that sits on a hidden workspace (Cmd+Tab, Dock click
 - Numbered workspaces (1 and up) and named workspaces (`name:web`, ids from 1000000) are created on demand and destroyed when empty, hidden and not persistent.
 - Each monitor shows one workspace. A workspace rule `monitor:` binds a workspace to a monitor; without it a new workspace opens on the focused monitor.
 - `workspace N` for a workspace visible on another monitor focuses that monitor. `binds:workspace_back_and_forth` turns a switch to the current workspace into a switch to the previous one.
-- Special workspaces (`special`, `special:name`, ids -99 downward) show on top of the current workspace of their monitor. Their tiled windows use the work area scaled by `special_scale_factor` and centered. `togglespecialworkspace` shows or hides them; `misc:close_special_on_empty` hides an empty one.
+- Special workspaces (`special` with id -99, `special:name` with ids from -98 upward) show on top of the current workspace of their monitor. Their tiled windows use the work area scaled by `special_scale_factor` and centered. `togglespecialworkspace` shows or hides them; `misc:close_special_on_empty` hides an empty one.
 - Per-workspace layout: from the workspace rule `layout:`, else `general:layout`. HyprOSX adds the dispatcher `workspacelayout NAME` (set) and `workspacelayout A B` (toggle between two).
 
 ### 5.3 Focus
