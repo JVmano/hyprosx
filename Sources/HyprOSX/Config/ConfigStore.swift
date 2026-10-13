@@ -19,6 +19,7 @@ final class ConfigStore {
 
     var directory: String { (path as NSString).deletingLastPathComponent }
     var appsPath: String { (directory as NSString).appendingPathComponent("apps.conf") }
+    var mainFileExists: Bool { FileManager.default.fileExists(atPath: path) }
 
     func load(writingDefaults: Bool = false) -> (Config, [Diagnostic]) {
         let fm = FileManager.default

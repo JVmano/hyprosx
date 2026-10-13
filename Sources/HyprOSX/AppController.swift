@@ -205,7 +205,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         followMouse(world.config.input.followMouse == 1)
         configStore.watch(sourced: world.config.sourcedFiles, enabled: !world.config.misc.disableAutoreload) { [weak self] in
-            self?.reloadConfig()
+            self?.reloadConfig(manual: false)
         }
     }
 
@@ -242,8 +242,16 @@ final class AppController: NSObject, NSApplicationDelegate {
         execute(world.handle(.cursorMoved(point)))
     }
 
-    private func reloadConfig(fromSocket: Bool = false) {
+    private func reloadConfig(fromSocket: Bool = false, manual: Bool = true) {
         guard let world, !paused else { return }
+        guard configStore.mainFileExists else {
+            let missing = Diagnostic(SourceLocation(file: configStore.path, line: 0), "config file \(configStore.path) is inaccessible")
+            if manual, !configErrors.contains(missing) {
+                configErrors.append(missing)
+                status.update()
+            }
+            return
+        }
         let runsExec = !fromSocket || world.config.macos.ipcExec
         world.cursor = Screens.cursor()
         let (config, diagnostics) = configStore.load()
