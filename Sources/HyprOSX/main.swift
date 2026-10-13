@@ -1,2 +1,7 @@
-import Foundation
-print("HyprOSX")
+import AppKit
+
+let app = NSApplication.shared
+let controller = AppController()
+app.delegate = controller
+app.setActivationPolicy(.accessory)
+app.run()

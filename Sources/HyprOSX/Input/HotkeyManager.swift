@@ -22,13 +22,14 @@ final class HotkeyManager {
         if let handler { RemoveEventHandler(handler) }
     }
 
-    func install() {
-        guard handler == nil else { return }
+    @discardableResult
+    func install() -> Bool {
+        guard handler == nil else { return true }
         var types = [
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
         ]
-        InstallEventHandler(GetEventDispatcherTarget(), { _, event, userData in
+        let status = InstallEventHandler(GetEventDispatcherTarget(), { _, event, userData in
             guard let event, let userData else { return OSStatus(eventNotHandledErr) }
             var id = EventHotKeyID()
             let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
@@ -38,6 +39,7 @@ final class HotkeyManager {
             manager.hotkey(id.id, pressed: GetEventKind(event) == UInt32(kEventHotKeyPressed))
             return noErr
         }, types.count, &types, Unmanaged.passUnretained(self).toOpaque(), &handler)
+        return status == noErr
     }
 
     func activate(_ binds: [Bind]) {

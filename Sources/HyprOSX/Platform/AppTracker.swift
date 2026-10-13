@@ -109,7 +109,13 @@ final class AppTracker {
     }
 
     private func activated(_ app: NSRunningApplication) {
-        if let thread = threads[app.processIdentifier] { thread.rescan() } else if isTracked(app) { register(app) }
+        if let thread = threads[app.processIdentifier] {
+            thread.rescan()
+        } else if isTracked(app) {
+            register(app)
+        } else {
+            onEvent(.focusChanged(nil))
+        }
     }
 
     private func hidden(_ app: NSRunningApplication) {

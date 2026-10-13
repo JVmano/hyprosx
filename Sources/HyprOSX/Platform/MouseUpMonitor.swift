@@ -14,10 +14,15 @@ final class MouseUpMonitor {
         }
     }
 
-    private func fire() {
+    func disarm() {
         guard let m = monitor else { return }
         NSEvent.removeMonitor(m)
         monitor = nil
+    }
+
+    private func fire() {
+        guard monitor != nil else { return }
+        disarm()
         onMouseUp()
     }
 }
