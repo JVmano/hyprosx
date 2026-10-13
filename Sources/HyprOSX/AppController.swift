@@ -204,6 +204,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             runtimeErrors.append("AeroSpace is running; quit it, or both apps will move windows")
         }
         followMouse(world.config.input.followMouse == 1)
+        watchConfig()
+    }
+
+    private func watchConfig() {
+        guard let world else { return }
         configStore.watch(sourced: world.config.sourcedFiles, enabled: !world.config.misc.disableAutoreload) { [weak self] in
             self?.reloadConfig(manual: false)
         }
@@ -293,7 +298,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             startupWindows.removeAll { $0.id == id }
         case .appTerminated(let pid):
             startupWindows.removeAll { $0.pid == pid }
-        case .windowSuspended, .windowResumed:
+        case .windowSuspended, .windowResumed, .appHidden:
             startupEvents.append(event)
         case .focusChanged:
             startupFocus = event
@@ -379,10 +384,16 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let world else { return "HyprOSX is waiting for Accessibility permission" }
         if paused { return "HyprOSX is paused" }
         world.cursor = Screens.cursor()
+        let autoreload = world.config.misc.disableAutoreload
         let reply = IPCResponder.handle(raw, world: world, version: Self.version, configErrors: allErrors, perfReport: { perfReport() })
         handlingSocket = true
         defer { handlingSocket = false }
         execute(reply.effects)
+        if reply.configChanged {
+            refreshHotkeys()
+            followMouse(world.config.input.followMouse == 1)
+            if world.config.misc.disableAutoreload != autoreload { watchConfig() }
+        }
         return reply.text
     }
 

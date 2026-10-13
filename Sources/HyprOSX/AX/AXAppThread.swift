@@ -166,6 +166,7 @@ final class AXAppThread {
             emit(.registrationDelayed)
             return
         }
+        AXUIElementSetMessagingTimeout(e, 1.0)
         let kind = WindowClassifier.classify(AXWindowAttributes(window: e, app: app, windowID: id), bundleID: bundleID,
                                              isAccessoryApp: isAccessory, windowLevel: AX.windowLevel(id))
         guard kind != .notAWindow else { return }

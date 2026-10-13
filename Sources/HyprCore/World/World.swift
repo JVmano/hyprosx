@@ -13,6 +13,7 @@ public final class World {
     public internal(set) var submap = ""
     public var cursor = Point(x: 1e9, y: 1e9)
     public var isStartingUp = false
+    var lastKnownMonitors: [MonitorInfo] = []
     var ignored: Set<WindowID> = []
     var previousWorkspace: Int?
     var previousPerMonitor: [Int: Int] = [:]
@@ -353,6 +354,7 @@ public final class World {
         let layoutChanged = sorted != monitors
         let previous = monitors
         monitors = sorted
+        if !sorted.isEmpty { lastKnownMonitors = sorted }
         guard let primary = monitors.first?.id else { return }
         let ids = Set(monitors.map(\.id))
         for (id, var ws) in workspaces {

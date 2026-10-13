@@ -90,6 +90,7 @@ final class AppTracker {
         case .registrationDelayed:
             onDelayedRegistration()
         case .scanned:
+            if let app = NSRunningApplication(processIdentifier: pid), app.isHidden { hidden(app) }
             if pendingScans.remove(pid) != nil && pendingScans.isEmpty { onInitialScanDone() }
         }
     }

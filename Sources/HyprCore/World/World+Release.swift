@@ -2,7 +2,8 @@ import Foundation
 
 extension World {
     public func releaseParked() -> [Effect] {
-        guard let area = monitor(focusedMonitor)?.visibleFrame ?? monitors.first?.visibleFrame else { return [] }
+        let known = monitors.isEmpty ? lastKnownMonitors : monitors
+        guard let area = (known.first { $0.id == focusedMonitor } ?? known.first)?.visibleFrame else { return [] }
         var changes: [FrameChange] = []
         for id in windows.keys.sorted() {
             guard var w = windows[id], w.isParked else { continue }

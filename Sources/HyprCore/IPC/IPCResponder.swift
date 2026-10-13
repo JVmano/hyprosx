@@ -3,6 +3,7 @@ import Foundation
 public struct IPCReply: Equatable, Sendable {
     public var text: String
     public var effects: [Effect]
+    public var configChanged = false
 }
 
 public enum IPCResponder {
@@ -10,6 +11,7 @@ public enum IPCResponder {
         let request = IPCRequest.parse(raw)
         var texts: [String] = []
         var effects: [Effect] = []
+        var configChanged = false
         let allowExec = world.config.macos.ipcExec
         for command in request.commands {
             if IPCPolicy.isReadOnly(command) {
@@ -39,6 +41,7 @@ public enum IPCResponder {
                     texts.append(error)
                 } else {
                     effects += world.reload(config)
+                    configChanged = true
                     texts.append("ok")
                 }
             case "reload":
@@ -68,7 +71,7 @@ public enum IPCResponder {
         if !allowExec {
             effects.removeAll { if case .spawn = $0 { return true } else { return false } }
         }
-        return IPCReply(text: texts.joined(separator: "\n\n"), effects: effects)
+        return IPCReply(text: texts.joined(separator: "\n\n"), effects: effects, configChanged: configChanged)
     }
 
     static func split(_ s: String) -> (String, String) {

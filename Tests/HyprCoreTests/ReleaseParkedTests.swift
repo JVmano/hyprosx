@@ -23,4 +23,24 @@ import Testing
         #expect(w.windows.values.allSatisfy { !$0.isParked })
         #expect(w.releaseParked().isEmpty)
     }
+
+    @Test func parkedWindowsComeBackEvenWhenEveryScreenIsGone() throws {
+        let w = World(config: Config())
+        let screen = MonitorInfo(id: 0, name: "M", frame: Rect(x: 0, y: 0, width: 1000, height: 800),
+                                 visibleFrame: Rect(x: 0, y: 30, width: 1000, height: 770))
+        _ = w.handle(.monitorsChanged([screen]))
+        _ = w.handle(.windowAppeared(WindowSnapshot(id: 1, pid: 10, bundleID: "a", appName: "A", title: "", frame: Rect(x: 0, y: 0, width: 400, height: 300), kind: .normal)))
+        _ = w.handle(.windowAppeared(WindowSnapshot(id: 2, pid: 10, bundleID: "a", appName: "A", title: "", frame: Rect(x: 0, y: 0, width: 400, height: 300), kind: .normal)))
+        _ = w.run(try CommandParser.parse(dispatcher: "movetoworkspacesilent", arguments: "2").get())
+        #expect(w.windows.values.filter(\.isParked).count == 1)
+        _ = w.handle(.monitorsChanged([]))
+        #expect(w.monitors.isEmpty)
+        guard case .setFrames(let changes)? = w.releaseParked().first else {
+            Issue.record("expected one .setFrames")
+            return
+        }
+        #expect(changes.count == 1)
+        #expect(screen.visibleFrame.contains(changes[0].frame.center))
+        #expect(w.windows.values.allSatisfy { !$0.isParked })
+    }
 }

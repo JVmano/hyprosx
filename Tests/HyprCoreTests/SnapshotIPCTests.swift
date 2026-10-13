@@ -336,6 +336,28 @@ func ipc(_ raw: String, _ world: World, errors: [String] = []) -> IPCReply {
         }
     }
 
+    @Test func anAppliedKeywordMarksTheConfigChanged() {
+        let w = world()
+        let bind = ipc("/keyword bind ALT, X, workspace, 2", w)
+        #expect(bind.text == "ok" && bind.configChanged)
+        #expect(w.activeBinds.contains { $0.dispatcher == "workspace" && $0.arguments == "2" })
+        let unbind = ipc("/keyword unbind ALT, X", w)
+        #expect(unbind.configChanged)
+        #expect(!w.activeBinds.contains { $0.dispatcher == "workspace" && $0.arguments == "2" })
+        #expect(ipc("/keyword input:follow_mouse 1", w).configChanged)
+        #expect(w.config.input.followMouse == 1)
+        #expect(ipc("/[[BATCH]]keyword general:no_such_option 3;keyword general:gaps_in 4", w).configChanged)
+    }
+
+    @Test func nothingButAnAppliedKeywordMarksTheConfigChanged() {
+        let w = threeWindows()
+        #expect(!ipc("/keyword general:no_such_option 3", w).configChanged)
+        #expect(!ipc("/keyword macos:ipc_exec true", w).configChanged)
+        #expect(!ipc("/dispatch workspace 2", w).configChanged)
+        #expect(!ipc("/reload", w).configChanged)
+        #expect(!ipc("/clients", w).configChanged)
+    }
+
     @Test func otherQueries() {
         let w = threeWindows()
         func ask(_ q: String) -> String { IPCResponder.handle(q, world: w, version: "0.1.0", configErrors: ["a.conf:1: bad"], perfReport: { "perf!" }).text }
