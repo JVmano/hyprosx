@@ -26,6 +26,13 @@ public struct IPCRequest: Equatable, Sendable {
 public enum IPCPolicy {
     static let blockedKeywords: Set<String> = ["source", "env"]
 
+    public static func isReadOnly(_ command: String) -> Bool {
+        let (name, rest) = IPCResponder.split(command)
+        guard name == "keyword" else { return false }
+        let key = IPCResponder.split(rest).0
+        return key.split(separator: ":").last?.lowercased().hasPrefix("ipc_") == true
+    }
+
     public static func isBlocked(_ command: String, allowExec: Bool) -> Bool {
         if allowExec { return false }
         let (name, rest) = IPCResponder.split(command)
@@ -37,7 +44,7 @@ public enum IPCPolicy {
         case "keyword":
             let (key, value) = IPCResponder.split(rest)
             let last = key.split(separator: ":").last.map { $0.lowercased() } ?? ""
-            if last.hasPrefix("exec") || last.hasPrefix("ipc_exec") || blockedKeywords.contains(last) { return true }
+            if last.hasPrefix("exec") || blockedKeywords.contains(last) { return true }
             let lowered = value.lowercased()
             if last.hasPrefix("bind") { return lowered.split(separator: ",").contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("exec") } }
             return last == "workspace" && lowered.contains("on-created-empty")

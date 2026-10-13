@@ -1,7 +1,9 @@
 import Foundation
 
 public struct StateSnapshot: Codable, Equatable, Sendable {
-    public var version = 1
+    public static let currentVersion = 1
+
+    public var version = StateSnapshot.currentVersion
     public var windows: [ManagedWindow]
     public var workspaces: [Workspace]
     public var activeWorkspace: [String: Int]
@@ -82,22 +84,24 @@ extension World {
                              activeWorkspace: active, focusedWindow: focusedWindow)
     }
 
-    public func restore(_ snap: StateSnapshot, alive: [WindowSnapshot]) -> [Effect] {
+    public func restore(_ saved: StateSnapshot, alive: [WindowSnapshot]) -> [Effect] {
+        let snap = saved.version == StateSnapshot.currentVersion ? saved : StateSnapshot(windows: [], workspaces: [], activeWorkspace: [:], focusedWindow: nil)
         let live = Dictionary(alive.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let before = Set(workspaces.keys)
-        var saved: [Workspace] = []
+        var restored: [Workspace] = []
         var savedIDs = Set<Int>()
         for var ws in snap.workspaces {
             let validID = ws.isSpecial ? (-99 ... -1).contains(ws.id) : (1 ... Int(Int32.max)).contains(ws.id)
             guard validID, savedIDs.insert(ws.id).inserted else { continue }
             ws.layout.sanitize()
-            saved.append(ws)
+            restored.append(ws)
         }
 
         func inRange(_ values: Double...) -> Bool { values.allSatisfy { $0.isFinite && abs($0) <= World.extent } }
         var kept: [WindowID: ManagedWindow] = [:]
         for var w in snap.windows {
             guard kept[w.id] == nil, let l = live[w.id], l.bundleID == w.bundleID, savedIDs.contains(w.workspace) else { continue }
+            w.pid = l.pid
+            w.appName = l.appName
             w.title = l.title
             if w.initialTitle.isEmpty { w.initialTitle = l.title }
             w.lastFrame = l.frame
@@ -118,7 +122,7 @@ extension World {
             return placed.insert(id).inserted
         }
         let primary = monitors.first?.id ?? 0
-        for var ws in saved {
+        for var ws in restored {
             ws.monitor = monitors.first { $0.name == ws.homeMonitorName }?.id ?? primary
             for id in ws.tiledIDs where !claim(id, floating: false, in: ws.id) { ws.layout.update { $0.remove(id) } }
             ws.floating = ws.floating.filter { claim($0, floating: true, in: ws.id) }
@@ -137,7 +141,7 @@ extension World {
         }
         if let f = snap.focusedWindow, kept[f] != nil { focusWindow(f, warp: false, emitEffect: false) }
         for s in alive where windows[s.id] == nil { addWindow(s) }
-        for id in before.subtracting(savedIDs) { destroyIfUnused(id) }
+        for id in workspaces.keys.sorted() { destroyIfUnused(id) }
         setMonitors(monitors)
         effects = effects.map { effect in
             guard case .setFrames(let changes) = effect else { return effect }

@@ -10,8 +10,13 @@ public enum IPCResponder {
         let request = IPCRequest.parse(raw)
         var texts: [String] = []
         var effects: [Effect] = []
+        let allowExec = world.config.macos.ipcExec
         for command in request.commands {
-            if IPCPolicy.isBlocked(command, allowExec: world.config.macos.ipcExec) {
+            if IPCPolicy.isReadOnly(command) {
+                texts.append("option not settable over IPC")
+                continue
+            }
+            if IPCPolicy.isBlocked(command, allowExec: allowExec) {
                 texts.append("exec over IPC is disabled (macos:ipc_exec)")
                 continue
             }
@@ -59,6 +64,9 @@ public enum IPCResponder {
             case "perf": texts.append(perfReport())
             default: texts.append("unknown request: \(name)")
             }
+        }
+        if !allowExec {
+            effects.removeAll { if case .spawn = $0 { return true } else { return false } }
         }
         return IPCReply(text: texts.joined(separator: "\n\n"), effects: effects)
     }

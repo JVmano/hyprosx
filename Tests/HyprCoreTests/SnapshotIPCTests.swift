@@ -56,6 +56,39 @@ func ipc(_ raw: String, _ world: World, errors: [String] = []) -> IPCReply {
         #expect(fresh.focusedWindow == 3)
     }
 
+    @Test func aSnapshotOfAnotherVersionIsTreatedAsEmpty() {
+        let w = threeWindows()
+        _ = w.run(.moveToWorkspace(.id(3), .address(2), silent: true))
+        var saved = w.snapshot()
+        saved.version = 2
+        let fresh = world()
+        _ = fresh.restore(saved, alive: [snap(1), snap(2, pid: 200), snap(3, pid: 300)])
+        #expect(fresh.workspaces[3] == nil)
+        #expect(fresh.windows[2]?.workspace == 1)
+        #expect(Set(fresh.workspaces[1]?.tiledIDs ?? []) == [1, 2, 3])
+    }
+
+    @Test func restoreTakesPidAndAppNameFromTheLiveWindow() {
+        let saved = threeWindows().snapshot()
+        let fresh = world()
+        _ = fresh.restore(saved, alive: [snap(1), snap(2, app: "Renamed", pid: 999), snap(3, pid: 300)])
+        #expect(fresh.windows[2]?.pid == 999)
+        #expect(fresh.windows[2]?.appName == "Renamed")
+        #expect(fresh.windows[1]?.pid == 100)
+    }
+
+    @Test func restoreDropsASavedWorkspaceWhoseWindowsAllDied() {
+        let w = threeWindows()
+        _ = w.run(.moveToWorkspace(.id(3), .address(2), silent: true))
+        let saved = w.snapshot()
+        #expect(saved.workspaces.contains { $0.id == 3 })
+        let fresh = world()
+        _ = fresh.restore(saved, alive: [snap(1), snap(3, pid: 300)])
+        #expect(fresh.workspaces[3] == nil)
+        #expect(fresh.workspaces[1] != nil)
+        #expect(fresh.activeWorkspace[0] == 1)
+    }
+
     @Test func restoreUsesLiveTitlesAndLeavesNoTitlesInTheSnapshot() throws {
         let w = world()
         _ = w.handle(.windowAppeared(snap(1, title: "bank statement")))
@@ -188,22 +221,57 @@ func ipc(_ raw: String, _ world: World, errors: [String] = []) -> IPCReply {
     }
 
     @Test func policyBlocksTheKeywordsThatReachExecIndirectly() {
-        #expect(IPCPolicy.isBlocked("keyword macos:ipc_exec true", allowExec: false))
-        #expect(IPCPolicy.isBlocked("keyword\tmacos:ipc_exec\ttrue", allowExec: false))
         #expect(IPCPolicy.isBlocked("keyword env PATH,/tmp/evil", allowExec: false))
         #expect(IPCPolicy.isBlocked("keyword bindd ALT, X, run it, execr, evil", allowExec: false))
         #expect(IPCPolicy.isBlocked("keyword execr evil", allowExec: false))
         #expect(IPCPolicy.isBlocked("keyword exec-shutdown evil", allowExec: false))
-        #expect(!IPCPolicy.isBlocked("keyword macos:ipc_exec true", allowExec: true))
         #expect(!IPCPolicy.isBlocked("keyword bind ALT, X, workspace, 2", allowExec: false))
     }
 
     @Test func aSocketCannotFlipTheFlagAndThenRunACommand() {
         let w = threeWindows()
         let r = ipc("/[[BATCH]]keyword macos:ipc_exec true;dispatch exec touch /tmp/pwned", w)
-        #expect(r.text == "exec over IPC is disabled (macos:ipc_exec)\n\nexec over IPC is disabled (macos:ipc_exec)")
+        #expect(r.text == "option not settable over IPC\n\nexec over IPC is disabled (macos:ipc_exec)")
         #expect(!w.config.macos.ipcExec)
         #expect(!r.effects.contains { if case .spawn = $0 { return true } else { return false } })
+    }
+
+    @Test func ipcOptionsCannotBeSetOverTheSocket() {
+        for command in ["keyword macos:ipc_exec true", "keyword\tmacos:ipc_exec\ttrue", "keyword macos:ipc_window_titles true", "keyword MACOS:IPC_EXEC true"] {
+            #expect(IPCPolicy.isReadOnly(command), "\(command)")
+        }
+        #expect(!IPCPolicy.isReadOnly("keyword general:gaps_in 3"))
+        #expect(!IPCPolicy.isReadOnly("dispatch workspace 2"))
+        let hidden = world("macos:ipc_window_titles = false")
+        #expect(ipc("/keyword macos:ipc_window_titles true", hidden).text == "option not settable over IPC")
+        #expect(!hidden.config.macos.ipcWindowTitles)
+        let open = world("macos:ipc_exec = true")
+        let r = ipc("/keyword macos:ipc_exec false", open)
+        #expect(r.text == "option not settable over IPC")
+        #expect(r.effects.isEmpty)
+        #expect(open.config.macos.ipcExec)
+        #expect(ipc("/keyword general:gaps_in 3", open).text == "ok")
+    }
+
+    @Test func spawnsFromTheOwnersRulesNeverLeaveThroughAClosedSocket() {
+        let rule = "workspace = 9, on-created-empty:open -a Calculator\n"
+        func spawns(_ effects: [Effect]) -> [Effect] { effects.filter { if case .spawn = $0 { return true } else { return false } } }
+        let direct = world(rule).run(.workspace(.id(9)))
+        #expect(!spawns(direct.effects).isEmpty)
+        for command in ["workspace 9", "movetoworkspace 9", "movetoworkspacesilent 9", "focusworkspaceoncurrentmonitor 9"] {
+            let closed = threeWindows(rule)
+            let r = ipc("/dispatch \(command)", closed)
+            #expect(r.text == "ok", "\(command)")
+            #expect(closed.workspaces[9] != nil, "\(command) must still create the workspace")
+            #expect(spawns(r.effects).isEmpty, "\(command) leaks a spawn")
+            guard command.hasPrefix("workspace") || command.hasPrefix("focusworkspace") else { continue }
+            let open = threeWindows("macos:ipc_exec = true\n" + rule)
+            #expect(!spawns(ipc("/dispatch \(command)", open).effects).isEmpty, "\(command) with ipc_exec")
+        }
+        let batch = ipc("/[[BATCH]]dispatch workspace 9;dispatch workspace 1", world(rule))
+        #expect(batch.text == "ok\n\nok")
+        #expect(spawns(batch.effects).isEmpty)
+        #expect(batch.effects.contains(.statusChanged))
     }
 
     @Test func execRunsOnlyWhenTheConfigAllowsIt() {
