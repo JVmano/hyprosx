@@ -81,6 +81,9 @@ final class AXAppThread {
                 AXObserverRemoveNotification(obs, self.app, kAXFocusedWindowChangedNotification as CFString)
             }
             self.windows = [:]
+            self.lock.lock()
+            self.runLoop = nil
+            self.lock.unlock()
             CFRunLoopStop(CFRunLoopGetCurrent())
         }
     }
@@ -92,7 +95,9 @@ final class AXAppThread {
     }
 
     private func threadMain() {
+        lock.lock()
         runLoop = CFRunLoopGetCurrent()
+        lock.unlock()
         started.signal()
         RunLoop.current.add(NSMachPort(), forMode: .default)
         AXUIElementSetMessagingTimeout(app, 1.0)
@@ -109,10 +114,15 @@ final class AXAppThread {
         CFRunLoopRun()
     }
 
-    private func perform(_ block: @escaping () -> Void) {
-        guard let rl = runLoop else { return }
+    @discardableResult
+    private func perform(_ block: @escaping () -> Void) -> Bool {
+        lock.lock()
+        let rl = runLoop
+        lock.unlock()
+        guard let rl else { return false }
         CFRunLoopPerformBlock(rl, CFRunLoopMode.defaultMode.rawValue, block)
         CFRunLoopWakeUp(rl)
+        return true
     }
 
     private func emit(_ event: AXAppEvent) {
@@ -124,7 +134,7 @@ final class AXAppThread {
 
     func flush(timeout: TimeInterval) {
         let done = DispatchSemaphore(value: 0)
-        perform { done.signal() }
+        guard perform({ done.signal() }) else { return }
         _ = done.wait(timeout: .now() + timeout)
     }
 
@@ -133,18 +143,20 @@ final class AXAppThread {
             guard let self else { return }
             let pending = self.delayed
             self.delayed = []
+            if pending.isEmpty { return }
             for e in pending { if let id = AX.windowID(e), self.windows[id] == nil { self.register(e, id: id) } }
+            self.reportFocused()
         }
     }
 
     private func scan() {
-        var seen = Set<WindowID>()
-        for e in AX.elements(app, kAXWindowsAttribute) {
-            guard let id = AX.windowID(e) else { continue }
-            seen.insert(id)
-            if windows[id] == nil { register(e, id: id) }
+        if let list = AX.elementList(app, kAXWindowsAttribute) {
+            for e in list {
+                guard let id = AX.windowID(e) else { continue }
+                if windows[id] == nil { register(e, id: id) }
+            }
         }
-        for id in Array(windows.keys) where !seen.contains(id) { forget(id) }
+        for (id, e) in Array(windows) where AX.windowID(e) == nil { forget(id) }
         reportFocused()
     }
 
@@ -240,49 +252,59 @@ final class AXAppThread {
         let schedule = !draining
         draining = true
         lock.unlock()
-        if schedule { perform { [weak self] in self?.drain() } }
+        if schedule { scheduleDrain() }
+    }
+
+    private func scheduleDrain() {
+        if perform({ [weak self] in self?.drain() }) { return }
+        lock.lock()
+        draining = false
+        lock.unlock()
     }
 
     private func drain() {
+        lock.lock()
+        let batch = jobs
+        jobs = [:]
+        if batch.isEmpty {
+            draining = false
+            lock.unlock()
+            return
+        }
+        lock.unlock()
         let eui = AX.bool(app, "AXEnhancedUserInterface") == true
         if eui { AX.setBool(app, "AXEnhancedUserInterface", false) }
-        defer { if eui { AX.setBool(app, "AXEnhancedUserInterface", true) } }
-        while true {
+        var written: [WindowID] = []
+        for (id, job) in batch {
+            guard let e = windows[id] else { continue }
+            written.append(id)
+            let start = DispatchTime.now().uptimeNanoseconds
+            var result: AXError
+            switch job {
+            case .frame(let r):
+                let size = CGSize(width: r.width, height: r.height)
+                AX.setSize(e, size)
+                AX.setPosition(e, CGPoint(x: r.x, y: r.y))
+                result = AX.setSize(e, size)
+            case .position(let p):
+                result = AX.setPosition(e, CGPoint(p))
+            }
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
             lock.lock()
-            let batch = jobs
-            jobs = [:]
-            if batch.isEmpty {
-                draining = false
-                lock.unlock()
-                return
-            }
+            calls += 1
+            if result != .success { errors += 1 }
+            latency = calls == 1 ? ms : latency * 0.8 + ms * 0.2
             lock.unlock()
-            var written: [WindowID] = []
-            for (id, job) in batch {
-                guard let e = windows[id] else { continue }
-                written.append(id)
-                let start = DispatchTime.now().uptimeNanoseconds
-                var result: AXError
-                switch job {
-                case .frame(let r):
-                    let size = CGSize(width: r.width, height: r.height)
-                    AX.setSize(e, size)
-                    AX.setPosition(e, CGPoint(x: r.x, y: r.y))
-                    result = AX.setSize(e, size)
-                case .position(let p):
-                    result = AX.setPosition(e, CGPoint(p))
-                }
-                let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-                lock.lock()
-                calls += 1
-                if result != .success { errors += 1 }
-                latency = calls == 1 ? ms : latency * 0.8 + ms * 0.2
-                lock.unlock()
-                if result == .invalidUIElement { forget(id) }
-            }
-            let until = DispatchTime.now().uptimeNanoseconds + 150_000_000
-            for id in written where windows[id] != nil { suppressUntil[id] = until }
+            if result == .invalidUIElement { forget(id) }
         }
+        if eui { AX.setBool(app, "AXEnhancedUserInterface", true) }
+        let until = DispatchTime.now().uptimeNanoseconds + 150_000_000
+        for id in written where windows[id] != nil { suppressUntil[id] = until }
+        lock.lock()
+        let more = !jobs.isEmpty
+        if !more { draining = false }
+        lock.unlock()
+        if more { scheduleDrain() }
     }
 
     func focus(_ id: WindowID) {
@@ -290,7 +312,8 @@ final class AXAppThread {
             guard let self, let e = self.windows[id] else { return }
             AX.setBool(e, kAXMainAttribute, true)
             AX.perform(e, kAXRaiseAction)
-            NSRunningApplication(processIdentifier: self.pid)?.activate(options: .activateIgnoringOtherApps)
+            AX.setBool(self.app, kAXFrontmostAttribute, true)
+            NSRunningApplication(processIdentifier: self.pid)?.activate()
         }
     }
 

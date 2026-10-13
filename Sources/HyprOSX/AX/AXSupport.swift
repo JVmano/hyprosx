@@ -37,10 +37,12 @@ enum AX {
         return (v as! AXUIElement)
     }
 
-    static func elements(_ e: AXUIElement, _ a: String) -> [AXUIElement] {
-        guard let array = value(e, a) as? [AnyObject] else { return [] }
+    static func elementList(_ e: AXUIElement, _ a: String) -> [AXUIElement]? {
+        guard let array = value(e, a) as? [AnyObject] else { return nil }
         return array.compactMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil }
     }
+
+    static func elements(_ e: AXUIElement, _ a: String) -> [AXUIElement] { elementList(e, a) ?? [] }
 
     static func frame(_ e: AXUIElement) -> Rect? {
         guard let p = value(e, kAXPositionAttribute), let s = value(e, kAXSizeAttribute),
