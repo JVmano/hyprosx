@@ -10,7 +10,7 @@ Collected 2026-10-10 on macOS 27.0.1 (build 26A434), M4 MacBook Pro (Mac16,1), S
 | A parked window (1 pt on screen) covered by an opaque 3 pt window | Still `occlusionState.visible`. Parked windows keep rendering; a cover does not help. |
 | `CGWindowListCopyWindowInfo(.optionOnScreenOnly)` | about 0.1 ms per call |
 | SkyLight symbols present | `SLSMainConnectionID`, `SLSHWCaptureWindowList`, `SLSOrderWindow`, `SLSSetWindowAlpha`, `SLSSetWindowTransform`, `SLSMoveWindow`, `SLSRequestNotificationsForWindows`, `SLSWindowSetShadowProperties`, `_SLPSSetFrontProcessWithOptions`, `SLPSPostEventRecordTo`, `SLSCaptureWindowsContentsToRectWithOptions`; `_AXUIElementGetWindow` in ApplicationServices |
-| `swift test` with Swift Testing | works with Command Line Tools and with Xcode |
+| `swift test` with Swift Testing | needs Xcode (`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`); with Command Line Tools selected the Swift Testing macros fail to load |
 | Terminal (Ghostty) Accessibility trust | not trusted; live tests run through HyprOSX.app and `hyprctl` |
 | Screens | one: "Built-in Retina Display", frame 1512x982 pt, visible 1512x950, scale 2 |
 | `NSScreen.screensHaveSeparateSpaces` | false (setting is off) |
