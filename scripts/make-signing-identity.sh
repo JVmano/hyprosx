@@ -1,13 +1,15 @@
 #!/bin/zsh
 set -euo pipefail
 name="HyprOSX Local Signing"
-if security find-identity -p codesigning | grep -q "\"$name\""; then
+identities="$(security find-identity -p codesigning)"
+if [[ $identities == *"\"$name\""* ]]; then
     print "\"$name\" already exists"
     exit 0
 fi
 ssl="${OPENSSL:-openssl}"
 legacy=()
-"$ssl" version | grep -q '^OpenSSL 3' && legacy=(-legacy)
+ssl_version="$("$ssl" version)"
+[[ $ssl_version == "OpenSSL 3"* ]] && legacy=(-legacy)
 work="$(mktemp -d)"
 trap 'rm -f "$work/key.pem" "$work/cert.pem" "$work/identity.p12"; rmdir "$work"' EXIT
 "$ssl" req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout "$work/key.pem" -out "$work/cert.pem" -subj "/CN=$name" \

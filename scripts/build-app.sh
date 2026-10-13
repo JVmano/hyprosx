@@ -7,6 +7,10 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]
 fi
 
 install=false
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "--install" ) ]]; then
+    print -u2 "usage: ${0:t} [--install]"
+    exit 2
+fi
 [[ "${1:-}" == "--install" ]] && install=true
 
 swift build -c release --product HyprOSX
@@ -19,7 +23,8 @@ cp Resources/Info.plist "$app/Contents/Info.plist"
 cp NOTICE "$app/Contents/Resources/NOTICE"
 
 identity="HyprOSX Local Signing"
-if security find-identity -p codesigning | grep -q "\"$identity\""; then
+identities="$(security find-identity -p codesigning)"
+if [[ $identities == *"\"$identity\""* ]]; then
     sign="$identity"
 else
     sign="-"
@@ -37,6 +42,9 @@ if $install; then
         running=true
         pkill -TERM -x HyprOSX
         for _ in {1..50}; do pgrep -xq HyprOSX || break; sleep 0.1; done
+        if pgrep -xq HyprOSX; then
+            print -u2 "warning: HyprOSX is still running after 5 s; the old build keeps running until you quit it"
+        fi
     fi
     mkdir -p "$HOME/Applications" "$HOME/.local/bin"
     rsync -a --delete "$app/" "$dest/"
