@@ -47,6 +47,7 @@ final class AppTracker {
         threads = [:]
         pendingScans = []
         appearedAt = [:]
+        hiddenByUs = []
     }
 
     func isTracked(_ app: NSRunningApplication) -> Bool {
@@ -124,7 +125,7 @@ final class AppTracker {
 
     func hide(_ pid: pid_t) {
         hiddenByUs.insert(pid)
-        NSRunningApplication(processIdentifier: pid)?.hide()
+        if NSRunningApplication(processIdentifier: pid)?.hide() != true { hiddenByUs.remove(pid) }
     }
 
     func unhide(_ pid: pid_t) {

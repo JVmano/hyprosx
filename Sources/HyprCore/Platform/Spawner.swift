@@ -54,11 +54,17 @@ public enum Spawner {
               posix_spawn_file_actions_addopen(&actions, 2, "/dev/null", O_WRONLY, 0) == 0 else {
             return .failure(SpawnError("cannot start command: file actions failed"))
         }
+        if environment.contains(where: { $0.key.utf8.contains(0) || $0.value.utf8.contains(0) }) {
+            return .failure(SpawnError("cannot start command: the environment contains a NUL byte"))
+        }
         let argv: [UnsafeMutablePointer<CChar>?] = ["/bin/sh", "-c", command].map { strdup($0) } + [nil]
         let envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer {
             argv.forEach { free($0) }
             envp.forEach { free($0) }
+        }
+        guard !argv.dropLast().contains(where: { $0 == nil }), !envp.dropLast().contains(where: { $0 == nil }) else {
+            return .failure(SpawnError("cannot start command: out of memory"))
         }
         var pid: pid_t = 0
         let rc = posix_spawn(&pid, "/bin/sh", &actions, &attr, argv, envp)
@@ -70,15 +76,20 @@ public enum Spawner {
     private static func reap(_ pid: pid_t) {
         reaperQueue.async {
             let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: reaperQueue)
-            let finish = {
-                var status: Int32 = 0
-                guard waitpid(pid, &status, WNOHANG) == pid else { return }
-                reapers.removeValue(forKey: pid)?.cancel()
-            }
-            source.setEventHandler(handler: finish)
+            source.setEventHandler { collect(pid, wait: true) }
             reapers[pid] = source
             source.resume()
-            finish()
+            collect(pid, wait: false)
         }
+    }
+
+    private static func collect(_ pid: pid_t, wait: Bool) {
+        guard let source = reapers[pid] else { return }
+        var status: Int32 = 0
+        var result: pid_t
+        repeat { result = waitpid(pid, &status, wait ? 0 : WNOHANG) } while result == -1 && errno == EINTR
+        if result == 0 { return }
+        reapers[pid] = nil
+        source.cancel()
     }
 }
