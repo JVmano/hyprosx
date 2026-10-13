@@ -13,7 +13,7 @@ let package = Package(
     targets: [
         .target(name: "HyprCore", swiftSettings: v5),
         .executableTarget(name: "HyprOSX", dependencies: ["HyprCore"], swiftSettings: v5),
-        .executableTarget(name: "hyprctl", swiftSettings: v5),
+        .executableTarget(name: "hyprctl", dependencies: ["HyprCore"], swiftSettings: v5),
         .testTarget(name: "HyprCoreTests", dependencies: ["HyprCore"], swiftSettings: v5),
     ]
 )
