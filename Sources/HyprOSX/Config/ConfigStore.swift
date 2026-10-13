@@ -7,6 +7,7 @@ final class ConfigStore {
     private var sources: [DispatchSourceFileSystemObject] = []
     private var watched: [String] = []
     private var fingerprint = ""
+    private var stamps: [String: String] = [:]
     private var pending: DispatchWorkItem?
 
     init(arguments: [String] = CommandLine.arguments, environment: [String: String] = ProcessInfo.processInfo.environment) {
@@ -19,13 +20,14 @@ final class ConfigStore {
     var directory: String { (path as NSString).deletingLastPathComponent }
     var appsPath: String { (directory as NSString).appendingPathComponent("apps.conf") }
 
-    func load() -> (Config, [Diagnostic]) {
+    func load(writingDefaults: Bool = false) -> (Config, [Diagnostic]) {
         let fm = FileManager.default
-        if !fm.fileExists(atPath: path) {
+        if writingDefaults, !fm.fileExists(atPath: path) {
             try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true)
             try? DefaultConfig.text.write(toFile: path, atomically: true, encoding: .utf8)
             if !fm.fileExists(atPath: appsPath) { try? DefaultConfig.appsText.write(toFile: appsPath, atomically: true, encoding: .utf8) }
         }
+        stamps = Dictionary(Set(watched + [path, appsPath]).map { ($0, stamp($0)) }, uniquingKeysWith: { a, _ in a })
         let result = ConfigLoader.load(path: path, environment: environment)
         return (result.config, result.diagnostics)
     }
@@ -35,9 +37,11 @@ final class ConfigStore {
         sources = []
         pending?.cancel()
         pending = nil
+        let known = stamps
+        stamps = [:]
         guard enabled else { return }
         watched = Array(sourced.union([path, appsPath])).sorted()
-        fingerprint = currentFingerprint()
+        fingerprint = currentFingerprint(known)
         for target in watched + [directory] {
             let fd = open(target, O_EVTONLY)
             guard fd >= 0 else { continue }
@@ -47,6 +51,7 @@ final class ConfigStore {
             source.resume()
             sources.append(source)
         }
+        if fingerprint != currentFingerprint() { changed(onChange) }
     }
 
     private func changed(_ onChange: @escaping () -> Void) {
@@ -59,12 +64,14 @@ final class ConfigStore {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
-    private func currentFingerprint() -> String {
-        watched.map { file in
-            let attributes = try? FileManager.default.attributesOfItem(atPath: file)
-            let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
-            let size = (attributes?[.size] as? NSNumber)?.intValue ?? -1
-            return "\(file) \(modified) \(size)"
-        }.joined(separator: "\n")
+    private func stamp(_ file: String) -> String {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: file)
+        let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
+        let size = (attributes?[.size] as? NSNumber)?.intValue ?? -1
+        return "\(modified) \(size)"
+    }
+
+    private func currentFingerprint(_ known: [String: String] = [:]) -> String {
+        watched.map { "\($0) \(known[$0] ?? stamp($0))" }.joined(separator: "\n")
     }
 }

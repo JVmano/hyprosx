@@ -140,7 +140,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func beginManaging() {
         paused = false
-        let (config, diagnostics) = configStore.load()
+        let (config, diagnostics) = configStore.load(writingDefaults: true)
         let world = World(config: config)
         self.world = world
         applyConfig(diagnostics)
@@ -175,11 +175,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         startupWindows = []
         startupEvents = []
         world.isStartingUp = false
-        if let focus = startupFocus {
-            execute(world.handle(focus))
-        } else if let front = NSWorkspace.shared.frontmostApplication, tracker.threads[front.processIdentifier] == nil {
-            execute(world.handle(.focusChanged(nil)))
-        }
+        execute(world.handle(startupFocus ?? .focusChanged(nil)))
         startupFocus = nil
         if !ranExecOnce {
             ranExecOnce = true
@@ -249,6 +245,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func reloadConfig(fromSocket: Bool = false) {
         guard let world, !paused else { return }
         let runsExec = !fromSocket || world.config.macos.ipcExec
+        world.cursor = Screens.cursor()
         let (config, diagnostics) = configStore.load()
         execute(world.reload(config))
         applyConfig(diagnostics)
