@@ -323,6 +323,8 @@ func twoFloatsAndOneTile() -> World {
             .toggleSpecialWorkspace("a"), .renameWorkspace(1, "x"), .layoutMessage("togglesplit"), .submap("x"), .alterZOrder(top: true),
             .moveCursorToCorner(2), .moveCursor(1, 2), .workspaceLayout(["monocle"]), .workspaceLayout(["dwindle", "master"]),
             .setProp(.active, "border_size", "3"), .exit, .noop, .unsupported("pass"),
+            .placeActive(.percent(33.33), .percent(100), .pixels(0), .pixels(0)),
+            .placeActive(.pixels(.nan), .percent(.infinity), .pixels(1e308), .percent(-1e308)),
             .workspace(.id(Int.min)), .workspace(.id(Int.max)), .workspace(.relative(Int.min)), .workspace(.relative(Int.max)),
             .workspace(.onMonitor(Int.min, includeEmpty: true)), .workspace(.onMonitor(Int.max, includeEmpty: false)),
             .workspace(.existing(Int.min)), .workspace(.existingAbsolute(Int.max)), .workspace(.onMonitorAbsolute(Int.min, includeEmpty: true)),

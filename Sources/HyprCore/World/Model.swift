@@ -48,8 +48,15 @@ public struct ManagedWindow: Equatable, Codable, Sendable {
     public var lastFrame: Rect
     public var isParked = false
     public var refitTarget: Rect?
+    public var placedFrame: Rect?
+    public var placedSlot: Rect?
     public var props: [String: String] = [:]
     public var address: String { String(format: "0x%x", id) }
+
+    mutating func dropPlacement() {
+        placedFrame = nil
+        placedSlot = nil
+    }
 }
 
 public enum LayoutKind: String, Codable, Sendable, CaseIterable { case dwindle, master, monocle }

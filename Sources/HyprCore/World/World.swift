@@ -185,8 +185,7 @@ public final class World {
         let border = borderSize(for: ws)
         for (id, box) in ws.layout.current.tileBoxes(ctx) {
             guard let w = windows[id], w.suspended == nil else { continue }
-            let b = w.props["border_size"].flatMap { finiteDouble($0) }.map(World.borderWidth) ?? border
-            out[id] = WindowGeometry.frame(tile: box, workArea: ctx.workArea, gapsIn: gaps, borderSize: b, pseudoSize: w.isPseudo ? w.pseudoSize : nil)
+            out[id] = w.placedFrame ?? tileFrame(w, box: box, ctx: ctx, gaps: gaps, border: border)
         }
         let visible = monitor(ws.monitor)?.visibleFrame
         for id in ws.floating { if let w = windows[id], w.suspended == nil { out[id] = World.reachable(w.floatingFrame, in: visible) } }
@@ -195,6 +194,36 @@ public final class World {
             out[id] = mode == 0 ? fullscreenArea(for: ws) : ctx.workArea.inset(by: Edges(all: border))
         }
         return out
+    }
+
+    func tileFrame(_ w: ManagedWindow, box: Rect, ctx: LayoutContext, gaps: Edges, border: Double) -> Rect {
+        let b = w.props["border_size"].flatMap { finiteDouble($0) }.map(World.borderWidth) ?? border
+        return WindowGeometry.frame(tile: box, workArea: ctx.workArea, gapsIn: gaps, borderSize: b, pseudoSize: w.isPseudo ? w.pseudoSize : nil)
+    }
+
+    func slotFrame(of id: WindowID, in ws: Workspace) -> Rect? {
+        let ctx = layoutContext(ws)
+        guard let w = windows[id], let box = ws.layout.current.tileBoxes(ctx)[id] else { return nil }
+        return tileFrame(w, box: box, ctx: ctx, gaps: gapsIn(for: ws), border: borderSize(for: ws))
+    }
+
+    @discardableResult
+    func clearPlacement(_ id: WindowID) -> Bool {
+        guard windows[id]?.placedFrame != nil else { return false }
+        windows[id]?.dropPlacement()
+        return true
+    }
+
+    func releasePlacement(_ id: WindowID?) {
+        guard let id, clearPlacement(id), let wsID = windows[id]?.workspace else { return }
+        refresh([wsID])
+    }
+
+    func reconcilePlacements(_ ws: Workspace) {
+        for id in ws.tiledIDs {
+            guard let slot = windows[id]?.placedSlot else { continue }
+            if slotFrame(of: id, in: ws).map({ !$0.isClose(to: slot) }) ?? true { clearPlacement(id) }
+        }
     }
 
     static func reachable(_ f: Rect, in visible: Rect?) -> Rect {
@@ -223,6 +252,7 @@ public final class World {
         for wsID in ids.sorted() {
             guard let ws = workspaces[wsID], let mon = monitor(ws.monitor) else { continue }
             if isVisible(wsID) {
+                reconcilePlacements(ws)
                 for (id, frame) in targetFrames(ws).sorted(by: { $0.key < $1.key }) where id != skip {
                     guard var w = windows[id] else { continue }
                     let stale = w.appliedFrame.map { !$0.isClose(to: frame) } ?? true
@@ -282,6 +312,7 @@ public final class World {
 
     func detach(_ id: WindowID) {
         guard let w = windows[id], var ws = workspaces[w.workspace] else { return }
+        clearPlacement(id)
         ws.layout.update { $0.remove(id) }
         ws.floating.removeAll { $0 == id }
         if ws.lastFocused == id { ws.lastFocused = nil }
@@ -499,7 +530,9 @@ public final class World {
             emit(.statusChanged)
             return
         }
+        let previous = focusedWindow
         focusedWindow = id
+        if let previous, previous != id, windows[previous]?.workspace == w.workspace { releasePlacement(id) }
         focusHistory.removeAll { $0 == id }
         focusHistory.append(id)
         workspaces[w.workspace]?.lastFocused = id

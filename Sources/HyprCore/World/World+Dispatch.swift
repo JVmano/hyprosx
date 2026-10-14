@@ -64,11 +64,13 @@ extension World {
             return nil
         case .floating(let action, let sel):
             guard let id = matchingWindows(sel).first, let w = windows[id] else { return "no matching window" }
+            releasePlacement(id)
             setFloating(id, action == .toggle ? !w.isFloating : action == .set)
             return nil
         case .fullscreen(let mode, let action):
             guard mode == 0 || mode == 1 else { return "invalid fullscreen mode" }
             guard let id = focusedWindow, let w = windows[id] else { return "no active window" }
+            releasePlacement(id)
             let turnOn = action == .toggle ? w.fullscreenMode != mode : action == .set
             for other in workspaces[w.workspace]?.windowIDs ?? [] { windows[other]?.fullscreenMode = nil }
             windows[id]?.fullscreenMode = turnOn ? mode : nil
@@ -83,7 +85,9 @@ extension World {
             emit(.saveState)
             return nil
         case .pseudo(let sel):
-            guard let id = matchingWindows(sel).first, let w = windows[id] else { return "no matching window" }
+            guard let id = matchingWindows(sel).first, windows[id] != nil else { return "no matching window" }
+            releasePlacement(id)
+            guard let w = windows[id] else { return "no matching window" }
             if !w.isPseudo { windows[id]?.pseudoSize = (w.appliedFrame ?? w.lastFrame).size }
             windows[id]?.isPseudo.toggle()
             refresh([w.workspace])
@@ -112,6 +116,9 @@ extension World {
         case .moveActive(let p):
             guard let id = focusedWindow else { return "no active window" }
             return move(id, p, name: "moveactive")
+        case .placeActive(let width, let height, let x, let y):
+            guard let id = focusedWindow else { return "no active window" }
+            return placeWindow(id, width, height, x, y)
         case .resizeWindow(let p, let sel):
             guard let id = matchingWindows(sel).first else { return "no matching window" }
             return resize(id, p)
@@ -228,6 +235,7 @@ extension World {
 
     func moveActiveWindow(_ target: MoveTarget, silent: Bool) -> String? {
         guard let id = focusedWindow, let w = windows[id], var ws = workspaces[w.workspace] else { return "no active window" }
+        releasePlacement(id)
         switch target {
         case .monitor(let sel):
             guard let m = resolveMonitor(sel), let dest = activeSpecial[m] ?? activeWorkspace[m] else { return "invalid monitor" }
@@ -279,6 +287,8 @@ extension World {
         case .window(let sel): other = matchingWindows(sel).first { $0 != id }
         }
         guard let other, windows[other]?.workspace == ws.id, windows[other]?.isFloating == false else { return "no window to swap with" }
+        releasePlacement(id)
+        releasePlacement(other)
         ws.layout.update { $0.swap(id, other) }
         workspaces[ws.id] = ws
         refresh([ws.id])
@@ -288,6 +298,7 @@ extension World {
 
     func resize(_ id: WindowID, _ p: ResizeParam) -> String? {
         guard let w = windows[id], var ws = workspaces[w.workspace] else { return "no matching window" }
+        if !w.isFloating { releasePlacement(id) }
         let area = workArea(for: ws)
         let current = w.isFloating ? w.floatingFrame : (idealBoxes(ws)[id] ?? w.lastFrame)
         var size: Size
@@ -332,6 +343,26 @@ extension World {
         return nil
     }
 
+    func placeWindow(_ id: WindowID, _ width: Measure, _ height: Measure, _ x: Measure, _ y: Measure) -> String? {
+        guard let w = windows[id], w.suspended == nil, let ws = workspaces[w.workspace] else { return "no active window" }
+        let area = workArea(for: ws)
+        let rect = Rect(x: World.bounded(area.x + measure(x, base: area.width)), y: World.bounded(area.y + measure(y, base: area.height)),
+                        width: min(max(World.minimumWindowSize, measure(width, base: area.width)), World.extent),
+                        height: min(max(World.minimumWindowSize, measure(height, base: area.height)), World.extent)).rounded()
+        if w.isFloating {
+            windows[id]?.floatingFrame = rect
+            refresh([ws.id])
+            emit(.saveState)
+            return nil
+        }
+        guard w.fullscreenMode == nil else { return "placeactive does not work on a fullscreen window" }
+        guard let slot = slotFrame(of: id, in: ws) else { return "no active window" }
+        windows[id]?.placedFrame = rect
+        windows[id]?.placedSlot = slot
+        refresh([ws.id])
+        return nil
+    }
+
     func layoutMessage(_ text: String) -> String? {
         guard let wsID = layoutTargetWorkspaceID, var ws = workspaces[wsID] else { return "no workspace" }
         let ctx = layoutContext(ws)
@@ -339,10 +370,12 @@ extension World {
         workspaces[wsID] = ws
         switch result {
         case .ok:
+            releasePlacement(focusedWindow)
             refresh([wsID])
             emit(.saveState)
             return nil
         case .focus(let id):
+            releasePlacement(focusedWindow)
             refresh([wsID])
             focusAndRaise(id)
             return nil

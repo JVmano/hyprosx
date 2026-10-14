@@ -17,6 +17,7 @@ public enum Command: Equatable, Sendable {
     case centerWindow
     case resizeActive(ResizeParam)
     case moveActive(ResizeParam)
+    case placeActive(Measure, Measure, Measure, Measure)
     case resizeWindow(ResizeParam, WindowSelector)
     case moveWindowTo(ResizeParam, WindowSelector)
     case cycleNext(CycleOptions)
@@ -73,7 +74,7 @@ public enum CommandParser {
         "focusmonitor", "focuscurrentorlast", "focusurgentorlast", "movecurrentworkspacetomonitor",
         "moveworkspacetomonitor", "focusworkspaceoncurrentmonitor", "swapactiveworkspaces", "togglespecialworkspace",
         "renameworkspace", "layoutmsg", "splitratio", "submap", "alterzorder", "bringactivetotop", "movecursortocorner",
-        "movecursor", "workspacelayout", "setprop", "exit", "forcerendererreload",
+        "movecursor", "workspacelayout", "setprop", "placeactive", "exit", "forcerendererreload",
     ]
 
     private static func splitComma(_ s: String) -> (String, String?) {
@@ -137,6 +138,9 @@ public enum CommandParser {
         case "centerwindow": return args.isEmpty || args == "1" ? .centerWindow : nil
         case "resizeactive": return ResizeParam.parse(args).map { .resizeActive($0) }
         case "moveactive": return ResizeParam.parse(args).map { .moveActive($0) }
+        case "placeactive":
+            let measures = words.compactMap(Measure.parse)
+            return words.count == 4 && measures.count == 4 ? .placeActive(measures[0], measures[1], measures[2], measures[3]) : nil
         case "resizewindowpixel", "movewindowpixel":
             let (r, w) = splitComma(args)
             guard let p = ResizeParam.parse(r), let sel = WindowSelector.parse(w ?? "") else { return nil }

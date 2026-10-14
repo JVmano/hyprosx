@@ -9,6 +9,7 @@ extension World {
         guard var w = windows[id], w.suspended == nil else { return }
         let center = (w.appliedFrame ?? w.lastFrame).center
         detach(id)
+        w.dropPlacement()
         w.suspended = reason
         w.isParked = false
         w.appliedFrame = nil
@@ -101,6 +102,7 @@ extension World {
             }
             return
         }
+        clearPlacement(id)
         let leftMoved = abs(frame.minX - applied.minX) > 2, rightMoved = abs(frame.maxX - applied.maxX) > 2
         let topMoved = abs(frame.minY - applied.minY) > 2, bottomMoved = abs(frame.maxY - applied.maxY) > 2
         let resized = abs(frame.width - applied.width) > 2 || abs(frame.height - applied.height) > 2

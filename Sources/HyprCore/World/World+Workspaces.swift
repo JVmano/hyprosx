@@ -305,6 +305,7 @@ extension World {
         let wsID = w.workspace
         let wasLast = workspaces[wsID]?.lastFocused == id
         detach(id)
+        w.dropPlacement()
         if floating, !w.everFloated, let ws = workspaces[wsID] {
             let area = workArea(for: ws)
             w.floatingFrame = Rect(x: area.x + area.width * 0.2, y: area.y + area.height * 0.2, width: area.width * 0.6, height: area.height * 0.6).rounded()

@@ -78,6 +78,7 @@ extension World {
             var w = window
             w.title = ""
             w.initialTitle = ""
+            w.dropPlacement()
             return w
         }
         return StateSnapshot(windows: saved, workspaces: workspaces.values.sorted { $0.id < $1.id },
@@ -107,6 +108,7 @@ extension World {
             w.lastFrame = l.frame
             w.appliedFrame = nil
             w.refitTarget = nil
+            w.dropPlacement()
             w.isParked = false
             w.suspended = nil
             let f = w.floatingFrame

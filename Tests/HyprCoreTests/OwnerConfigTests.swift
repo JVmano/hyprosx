@@ -16,6 +16,10 @@ import Foundation
         #expect(config.windowRules.count == 8)
         #expect(config.workspaceRules.count == 8)
         #expect(config.binds.filter { $0.submap == "resize" }.count == 6)
+        #expect(config.binds.filter { $0.dispatcher == "placeactive" }.map(\.arguments)
+            == ["33.33% 100% 0 0", "33.33% 100% 33.33% 0", "33.33% 100% 66.67% 0", "50% 100% 0 0", "50% 100% 50% 0"])
+        #expect(config.binds.filter { $0.dispatcher == "setfloating" }.isEmpty)
+        #expect(config.binds.filter { $0.dispatcher == "moveactive" }.isEmpty)
         for bind in config.binds where !bind.flags.contains(.mouse) {
             #expect((try? CommandParser.parse(dispatcher: bind.dispatcher, arguments: bind.arguments).get()) != nil, "\(bind.dispatcher) \(bind.arguments)")
         }
