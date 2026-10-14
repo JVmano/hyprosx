@@ -120,13 +120,14 @@ extension World {
         refresh([ws.id], skip: id)
     }
 
-    func endDrag(at point: Point) {
+    @discardableResult
+    func endDrag(at point: Point) -> Bool {
         cursor = point
-        guard let id = dragging else { return }
+        guard let id = dragging else { return false }
         dragging = nil
         let wasResize = dragIsResize
         dragIsResize = false
-        guard var w = windows[id], !w.isFloating, let ws = workspaces[w.workspace] else { return }
+        guard var w = windows[id], !w.isFloating, let ws = workspaces[w.workspace] else { return false }
         w.appliedFrame = w.lastFrame
         windows[id] = w
         let boxes = idealBoxes(ws)
@@ -134,19 +135,20 @@ extension World {
         let targetWS = activeSpecial[targetMonitor] ?? activeWorkspace[targetMonitor] ?? ws.id
         if wasResize || (targetWS == ws.id && boxes[id]?.contains(point) ?? true) {
             refresh([ws.id])
-            return
+            return false
         }
         if targetWS == ws.id, ws.layout.kind != .dwindle {
             let other = boxes.keys.sorted().first { $0 != id && boxes[$0]?.contains(point) == true && windows[$0]?.isFloating == false }
             if let other { workspaces[ws.id]?.layout.update { $0.swap(id, other) } }
             refresh([ws.id])
-            return
+            return other != nil
         }
         relocate(id, to: targetWS, focalPoint: point)
         if focusedWindow == id, let m = workspaces[targetWS]?.monitor { focusedMonitor = m }
         refresh([ws.id, targetWS])
         destroyIfUnused(ws.id)
         emit(.saveState)
+        return true
     }
 
     func nativeFocusChanged(_ id: WindowID?) {

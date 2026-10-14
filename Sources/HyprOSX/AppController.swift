@@ -11,6 +11,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let log = Logger(subsystem: "dev.hyprosx", category: "app")
     private let configStore = ConfigStore()
     private let stateStore = StateStore()
+    private let dropPreview = DropPreview()
     private var status: StatusItem!
     private var world: World?
     private var tracker: AppTracker!
@@ -72,6 +73,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        dropPreview.hide()
         guard isSetUp, let world else { return }
         if !paused {
             execute(world.releaseParked())
@@ -273,6 +275,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             return
         }
         guard let world else { return }
+        dropPreview.hide()
         execute(world.releaseParked())
         tracker.unhideAllHiddenByUs()
         saveStateNow()
@@ -311,6 +314,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let world, !paused else { return }
         world.cursor = Screens.cursor()
         execute(world.handle(event))
+        if case .windowFrameChanged(_, _, userDriven: true) = event { updateDropPreview() }
+    }
+
+    private func updateDropPreview() {
+        guard let world, let frame = world.dropPreview(cursor: Screens.cursor()) else { return dropPreview.hide() }
+        dropPreview.show(frame, border: world.config.general.activeBorder)
     }
 
     private func dispatch(_ command: Command) {
@@ -405,6 +414,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func mouseReleased() {
+        dropPreview.hide()
         if delayedPending {
             delayedPending = false
             tracker.threads.values.forEach { $0.flushDelayed() }
