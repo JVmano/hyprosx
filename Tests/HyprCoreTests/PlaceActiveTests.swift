@@ -101,17 +101,16 @@ func tileFrames(_ w: World) -> [WindowID: Rect] {
         let w = twoWindows()
         _ = placeThird(w)
         let saved = w.snapshot()
-        #expect(saved.windows.allSatisfy { $0.placedFrame == nil && $0.placedArea == nil })
+        #expect(saved.windows.allSatisfy { $0.placedFrame == nil })
         let json = String(decoding: try JSONEncoder().encode(saved), as: UTF8.self)
-        #expect(!json.contains("placedFrame") && !json.contains("placedArea"))
+        #expect(!json.contains("placedFrame"))
         var tampered = saved
         for i in tampered.windows.indices {
             tampered.windows[i].placedFrame = Rect(x: 1, y: 2, width: 3, height: 4)
-            tampered.windows[i].placedArea = Rect(x: 1, y: 2, width: 3, height: 4)
         }
         let fresh = world()
         let e = fresh.restore(tampered, alive: [snap(1), snap(2, pid: 200)])
-        #expect(fresh.windows.values.allSatisfy { $0.placedFrame == nil && $0.placedArea == nil })
+        #expect(fresh.windows.values.allSatisfy { $0.placedFrame == nil })
         #expect(frames(e)[2] == rightHalf)
     }
 

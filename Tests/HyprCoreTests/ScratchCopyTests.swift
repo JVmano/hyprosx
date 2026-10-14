@@ -19,6 +19,7 @@ func dirtyWorld() -> World {
     w.focusedWindow = 1
     w.dragging = 1
     w.dragIsResize = true
+    w.placementOrder = [2, 1]
     return w
 }
 

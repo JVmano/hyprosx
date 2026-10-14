@@ -24,6 +24,7 @@ public final class World {
     var nextSpawnToken = 1
     var dragging: WindowID?
     var dragIsResize = false
+    var placementOrder: [WindowID] = []
     var effects: [Effect] = []
 
     static let extent = 100_000.0
@@ -183,9 +184,10 @@ public final class World {
         let ctx = layoutContext(ws)
         let gaps = gapsIn(for: ws)
         let border = borderSize(for: ws)
+        let placements = activePlacements(ws, area: ctx.workArea)
         for (id, box) in effectiveBoxes(ws) {
             guard let w = windows[id], w.suspended == nil else { continue }
-            out[id] = w.placedFrame ?? tileFrame(w, box: box, ctx: ctx, gaps: gaps, border: border)
+            out[id] = placements[id] ?? tileFrame(w, box: box, ctx: ctx, gaps: gaps, border: border)
         }
         let visible = monitor(ws.monitor)?.visibleFrame
         for id in ws.floating { if let w = windows[id], w.suspended == nil { out[id] = World.reachable(w.floatingFrame, in: visible) } }

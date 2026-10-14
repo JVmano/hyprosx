@@ -49,13 +49,11 @@ public struct ManagedWindow: Equatable, Codable, Sendable {
     public var isParked = false
     public var refitTarget: Rect?
     public var placedFrame: Rect?
-    public var placedArea: Rect?
     public var props: [String: String] = [:]
     public var address: String { String(format: "0x%x", id) }
 
     mutating func dropPlacement() {
         placedFrame = nil
-        placedArea = nil
     }
 }
 

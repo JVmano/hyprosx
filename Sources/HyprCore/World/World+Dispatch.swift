@@ -255,6 +255,7 @@ extension World {
                 emit(.saveState)
                 return nil
             }
+            if clearPlacementsAhead(of: id, d, in: ws) { refresh([ws.id]) }
             let ctx = layoutContext(ws)
             let moved = ws.layout.update { $0.moveWindow(id, d, ctx) }
             workspaces[ws.id] = ws

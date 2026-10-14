@@ -123,7 +123,7 @@ let workArea20 = Rect(x: 20, y: 52, width: 1472, height: 910)
             _ = placeOwner(w, width: 33.33, x: 0)
             #expect(w.windows[1]?.placedFrame != nil, "\(name)")
             let r = w.run(command)
-            #expect(w.windows[1]?.placedFrame == nil && w.windows[1]?.placedArea == nil, "\(name) \(r.reply)")
+            #expect(w.windows[1]?.placedFrame == nil, "\(name) \(r.reply)")
             let reference = ownerWorld()
             _ = reference.run(command)
             let visible = { (world: World) in
@@ -278,5 +278,131 @@ let workArea20 = Rect(x: 20, y: 52, width: 1472, height: 910)
         #expect(bad.isError && single.windows[1]?.placedFrame != nil)
         let same = single.run(.moveWindow(.monitor(.id(0)), silent: false))
         #expect(!same.isError && single.windows[1]?.placedFrame != nil)
+    }
+
+    @Test func aRectOutsideTheWorkAreaIsDroppedAndAnOlderPlacementIsCleared() {
+        let original = ownerWorld()
+        let w = ownerWorld()
+        let off = placeOwner(w, width: 33.33, x: 200)
+        #expect(off.isError)
+        #expect(w.windows[1]?.placedFrame == nil)
+        #expect(tileFrames(w) == tileFrames(original))
+        _ = placeOwner(w, width: 33.33, x: 0)
+        #expect(w.windows[1]?.placedFrame != nil)
+        let again = placeOwner(w, width: 33.33, x: 200)
+        #expect(again.isError)
+        #expect(w.windows[1]?.placedFrame == nil)
+        #expect(tileFrames(w) == tileFrames(original))
+        let negative = placeOwner(w, width: 33.33, x: -200)
+        #expect(negative.isError && w.windows[1]?.placedFrame == nil)
+    }
+
+    @Test func aPartlyOutsideRectIsClampedForTheStrips() {
+        let w = ownerWorld()
+        let r = placeOwner(w, width: 50, x: 75)
+        #expect(!r.isError)
+        #expect(w.windows[1]?.placedFrame == Rect(x: 1124, y: 52, width: 736, height: 910))
+        #expect(tileFrames(w)[2] == Rect(x: 20, y: 52, width: 1096, height: 451))
+        #expect(tileFrames(w)[3] == Rect(x: 20, y: 511, width: 1096, height: 451))
+        for id: WindowID in [2, 3] {
+            let f = tileFrames(w)[id]!
+            #expect(f.minX >= workArea20.minX && f.maxX <= workArea20.maxX && f.minY >= workArea20.minY && f.maxY <= workArea20.maxY)
+        }
+        let spanning = ownerWorld()
+        _ = placeOwner(spanning, width: 50, x: 0, height: 200, y: -50)
+        for id: WindowID in [2, 3] {
+            let f = tileFrames(spanning)[id]!
+            #expect(f.minX >= workArea20.minX && f.maxX <= workArea20.maxX && f.minY >= workArea20.minY && f.maxY <= workArea20.maxY)
+        }
+        #expect(tileFrames(spanning)[2]!.minX >= 760)
+    }
+
+    @Test func aReloadThatShrinksTheWorkAreaKeepsTheOthersInsideIt() {
+        let w = ownerWorld()
+        _ = placeOwner(w, width: 33.33, x: 0)
+        _ = w.reload(makeConfig("general:gaps_in = 4\ndwindle:preserve_split = true\nworkspace = 1, gapsout:100"))
+        let area = Rect(x: 100, y: 132, width: 1312, height: 750)
+        #expect(w.windows[1]?.placedFrame != nil)
+        for id: WindowID in [2, 3] {
+            let f = tileFrames(w)[id]!
+            #expect(f.minX >= area.minX && f.maxX <= area.maxX && f.minY >= area.minY && f.maxY <= area.maxY)
+        }
+        _ = w.reload(makeConfig("general:gaps_in = 4\ndwindle:preserve_split = true\nworkspace = 1, gapsout:700"))
+        #expect(w.windows[1]?.placedFrame == nil)
+    }
+
+    @Test func aDirectionalMovewindowTowardThePlacedWindowClearsItFirst() {
+        let cases: [(Direction, Bool)] = [(.left, true), (.right, false), (.up, false), (.down, false)]
+        for (direction, clears) in cases {
+            let w = ownerWorld()
+            _ = placeOwner(w, width: 33.33, x: 0)
+            _ = w.run(.focusWindow(.address(2)))
+            let before = w.windows[1]?.placedFrame
+            _ = w.run(.moveWindow(.direction(direction), silent: false))
+            #expect((w.windows[1]?.placedFrame == nil) == clears, "\(direction)")
+            if clears {
+                let reference = ownerWorld()
+                _ = reference.run(.focusWindow(.address(2)))
+                _ = reference.run(.moveWindow(.direction(direction), silent: false))
+                #expect(tileFrames(w) == tileFrames(reference))
+            } else {
+                #expect(w.windows[1]?.placedFrame == before)
+            }
+        }
+        for (focused, direction) in [(WindowID(3), Direction.left), (WindowID(2), Direction.right)] {
+            let w = ownerWorld()
+            _ = placeOwner(w, width: 33.33, x: 33.33)
+            _ = w.run(.focusWindow(.address(focused)))
+            _ = w.run(.moveWindow(.direction(direction), silent: false))
+            #expect(w.windows[1]?.placedFrame == nil, "\(focused) \(direction)")
+        }
+    }
+
+    @Test func aPlacementThatLeavesNoRoomForTheOthersIsClearedAsTheNewest() {
+        let original = ownerWorld()
+        let full = ownerWorld()
+        let r = placeOwner(full, width: 100, x: 0)
+        #expect(r.isError && full.windows[1]?.placedFrame == nil)
+        #expect(tileFrames(full) == tileFrames(original))
+
+        let w = ownerWorld()
+        _ = placeOwner(w, width: 50, x: 0)
+        _ = w.run(.focusWindow(.address(2)))
+        let second = placeOwner(w, width: 50, x: 50)
+        #expect(second.isError)
+        #expect(w.windows[2]?.placedFrame == nil && w.windows[1]?.placedFrame != nil)
+        #expect(tileFrames(w)[3]!.minX >= 764)
+    }
+
+    @Test func aWindowOpeningWhenThePlacedRectsFillTheWidthClearsTheNewestPlacement() {
+        let w = ownerWorld()
+        for (id, x) in [(1, 0.0), (2, 33.33), (3, 66.67)] {
+            _ = w.run(.focusWindow(.address(WindowID(id))))
+            _ = placeOwner(w, width: 33.33, x: x)
+        }
+        #expect(w.windows.values.allSatisfy { $0.placedFrame != nil })
+        _ = w.handle(.windowAppeared(snap(4, pid: 400)))
+        #expect(w.windows[3]?.placedFrame == nil)
+        #expect(w.windows[1]?.placedFrame != nil && w.windows[2]?.placedFrame != nil)
+        let f = tileFrames(w)
+        #expect(f[3]!.minX >= 1010 && f[4]!.minX >= 1010)
+        #expect(!overlap(f[3]!, f[4]!) && !overlap(f[1]!, f[3]!) && !overlap(f[2]!, f[4]!))
+    }
+
+    @Test func aSingleWindowMayFillTheWholeWorkArea() {
+        let w = ownerWorld(windows: 1)
+        let r = placeOwner(w, width: 100, x: 0)
+        #expect(!r.isError)
+        #expect(tileFrames(w) == [1: workArea20])
+    }
+
+    @Test func thePlacedWindowClosingReTilesTheRestOverTheFullArea() {
+        let w = ownerWorld()
+        _ = placeOwner(w, width: 33.33, x: 33.33)
+        _ = w.handle(.windowDisappeared(1))
+        let reference = ownerWorld()
+        _ = reference.handle(.windowDisappeared(1))
+        #expect(tileFrames(w) == tileFrames(reference))
+        #expect(w.windows[1] == nil)
     }
 }

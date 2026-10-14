@@ -6,6 +6,7 @@ extension World {
 
     @discardableResult
     func clearPlacement(_ id: WindowID) -> Bool {
+        placementOrder.removeAll { $0 == id }
         guard windows[id]?.placedFrame != nil else { return false }
         windows[id]?.dropPlacement()
         return true
@@ -16,12 +17,29 @@ extension World {
         refresh([wsID])
     }
 
-    func reconcilePlacements(_ ws: Workspace) {
-        let area = fullscreenArea(for: ws)
+    func activePlacements(_ ws: Workspace, area: Rect) -> [WindowID: Rect] {
+        var out: [WindowID: Rect] = [:]
         for id in ws.tiledIDs {
-            guard let stamp = windows[id]?.placedArea, !stamp.isClose(to: area) else { continue }
-            clearPlacement(id)
+            if let rect = windows[id]?.placedFrame, World.clip(rect, to: area) != nil { out[id] = rect }
         }
+        return out
+    }
+
+    func reconcilePlacements(_ ws: Workspace) {
+        let area = workArea(for: ws)
+        var active = activePlacements(ws, area: area)
+        for id in ws.tiledIDs where windows[id]?.placedFrame != nil && active[id] == nil { clearPlacement(id) }
+        while !active.isEmpty, hasNoRoom(ws, placements: active, area: area) {
+            guard let newest = placementOrder.last(where: { active[$0] != nil }) ?? active.keys.min() else { break }
+            clearPlacement(newest)
+            active[newest] = nil
+        }
+    }
+
+    func hasNoRoom(_ ws: Workspace, placements: [WindowID: Rect], area: Rect) -> Bool {
+        guard ws.tiledIDs.contains(where: { placements[$0] == nil }) else { return false }
+        let clipped = placements.values.compactMap { World.clip($0, to: area) }
+        return World.freeStrips(placed: clipped, in: area, gaps: gapsIn(for: ws)).isEmpty
     }
 
     func placeWindow(_ id: WindowID, _ width: Measure, _ height: Measure, _ x: Measure, _ y: Measure) -> String? {
@@ -37,14 +55,45 @@ extension World {
             return nil
         }
         guard w.fullscreenMode == nil else { return "placeactive does not work on a fullscreen window" }
+        guard World.clip(rect, to: area) != nil else {
+            releasePlacement(id)
+            return "placeactive rectangle is outside the work area"
+        }
         for other in ws.tiledIDs where other != id {
             guard let older = windows[other]?.placedFrame, World.overlaps(older, rect) else { continue }
             clearPlacement(other)
         }
         windows[id]?.placedFrame = rect
-        windows[id]?.placedArea = fullscreenArea(for: ws)
+        placementOrder.removeAll { $0 == id || windows[$0]?.placedFrame == nil }
+        placementOrder.append(id)
         refresh([ws.id])
-        return nil
+        return windows[id]?.placedFrame == nil ? "placeactive leaves no room for the other windows" : nil
+    }
+
+    func clearPlacementsAhead(of id: WindowID, _ direction: Direction, in ws: Workspace) -> Bool {
+        guard windows[id]?.placedFrame == nil else { return false }
+        let boxes = effectiveBoxes(ws)
+        guard let box = boxes[id] else { return false }
+        var cleared = false
+        for other in ws.tiledIDs where other != id {
+            guard windows[other]?.placedFrame != nil, let target = boxes[other] else { continue }
+            let ahead: Bool, span: Double
+            switch direction {
+            case .left: ahead = target.maxX <= box.minX + World.overlapTolerance; span = min(target.maxY, box.maxY) - max(target.minY, box.minY)
+            case .right: ahead = target.minX >= box.maxX - World.overlapTolerance; span = min(target.maxY, box.maxY) - max(target.minY, box.minY)
+            case .up: ahead = target.maxY <= box.minY + World.overlapTolerance; span = min(target.maxX, box.maxX) - max(target.minX, box.minX)
+            case .down: ahead = target.minY >= box.maxY - World.overlapTolerance; span = min(target.maxX, box.maxX) - max(target.minX, box.minX)
+            }
+            if ahead && span > 1 { cleared = clearPlacement(other) || cleared }
+        }
+        return cleared
+    }
+
+    static func clip(_ rect: Rect, to area: Rect) -> Rect? {
+        let x0 = max(rect.minX, area.minX), x1 = min(rect.maxX, area.maxX)
+        let y0 = max(rect.minY, area.minY), y1 = min(rect.maxY, area.maxY)
+        guard x1 - x0 > overlapTolerance, y1 - y0 > overlapTolerance else { return nil }
+        return Rect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 
     static func overlaps(_ a: Rect, _ b: Rect) -> Bool {
@@ -53,19 +102,21 @@ extension World {
 
     func effectiveBoxes(_ ws: Workspace) -> [WindowID: Rect] {
         let ctx = layoutContext(ws)
-        let placed = ws.tiledIDs.filter { windows[$0]?.placedFrame != nil }
-        guard !placed.isEmpty else { return ws.layout.current.tileBoxes(ctx) }
+        let area = ctx.workArea
+        let placements = activePlacements(ws, area: area)
+        guard !placements.isEmpty else { return ws.layout.current.tileBoxes(ctx) }
         let gaps = gapsIn(for: ws)
         var out: [WindowID: Rect] = [:]
-        var rects: [Rect] = []
-        for id in placed {
-            guard let rect = windows[id]?.placedFrame else { continue }
-            rects.append(rect)
-            out[id] = World.inflated(rect, in: ctx.workArea, gaps: gaps)
+        var clipped: [Rect] = []
+        for id in ws.tiledIDs {
+            guard let rect = placements[id], let inside = World.clip(rect, to: area) else { continue }
+            clipped.append(inside)
+            out[id] = World.clip(World.inflated(inside, in: area, gaps: gaps), to: area) ?? inside
         }
-        let strips = World.freeStrips(placed: rects, in: ctx.workArea, gaps: gaps)
+        let found = World.freeStrips(placed: clipped, in: area, gaps: gaps)
+        let strips = found.isEmpty ? [area] : found
         var rest = ws.layout
-        for id in placed { rest.update { $0.remove(id) } }
+        for id in placements.keys { rest.update { $0.remove(id) } }
         if strips.count == 1 {
             var stripCtx = ctx
             stripCtx.workArea = strips[0]
@@ -92,7 +143,7 @@ extension World {
     }
 
     static func freeStrips(placed rects: [Rect], in area: Rect, gaps: Edges) -> [Rect] {
-        let boxes = rects.map { inflated($0, in: area, gaps: gaps) }
+        let boxes = rects.map { clip(inflated($0, in: area, gaps: gaps), to: area) ?? $0 }
         var strips: [Rect] = []
         if rects.allSatisfy({ $0.minY < area.minY + overlapTolerance && $0.maxY > area.maxY - overlapTolerance }) {
             var edge = area.minX
@@ -113,6 +164,6 @@ extension World {
             let roomy = candidates.filter { $0.width >= minimumStrip && $0.height >= minimumStrip }
             if let best = roomy.max(by: { $0.width * $0.height < $1.width * $1.height }) { strips = [best] }
         }
-        return strips.isEmpty ? [area] : strips
+        return strips
     }
 }
