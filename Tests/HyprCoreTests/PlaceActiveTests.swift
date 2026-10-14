@@ -36,20 +36,6 @@ func tileFrames(_ w: World) -> [WindowID: Rect] {
 }
 
 @Suite struct PlaceActiveTests {
-    @Test func placingATiledWindowEmitsOnlyItsFrameAndKeepsTheLayout() {
-        let w = threeWindows()
-        let layout = w.workspaces[1]?.layout
-        let others = tileFrames(w).filter { $0.key != 3 }
-        let r = placeThird(w)
-        #expect(!r.isError)
-        #expect(frames(r.effects) == [3: leftThird])
-        #expect(w.workspaces[1]?.layout == layout)
-        #expect(w.windows[3]?.isFloating == false)
-        #expect(w.workspaces[1]?.floating == [])
-        #expect(tileFrames(w).filter { $0.key != 3 } == others)
-        #expect(w.windows[3]?.placedFrame == leftThird)
-    }
-
     @Test func theAppEchoingThePlacedFrameChangesNothing() {
         let w = threeWindows()
         _ = placeThird(w)
@@ -88,120 +74,6 @@ func tileFrames(_ w: World) -> [WindowID: Rect] {
         #expect(frames(place(w, .percent(50), .percent(100), .percent(50), .pixels(0)).effects)[1] == Rect(x: 756, y: 52, width: 736, height: 910))
     }
 
-    @Test func openingClosingAndResizingReturnThePlacedWindowToItsTile() {
-        func scenario(_ change: (World) -> Void) -> (World, World) {
-            let placed = threeWindows(), plain = threeWindows()
-            _ = placeThird(placed)
-            change(placed)
-            change(plain)
-            return (placed, plain)
-        }
-        let changes: [(World) -> Void] = [
-            { _ = $0.handle(.windowAppeared(snap(4, pid: 400))) },
-            { _ = $0.handle(.windowDisappeared(1)) },
-            { _ = $0.run(.resizeWindow(.relative(.pixels(60), .pixels(0)), .address(1))) },
-        ]
-        for change in changes {
-            let (placed, plain) = scenario(change)
-            #expect(placed.windows[3]?.placedFrame == nil)
-            #expect(tileFrames(placed) == tileFrames(plain))
-        }
-    }
-
-    @Test func aTileBoxChangeEmitsTheTileFrameForThePlacedWindow() {
-        let w = twoWindows()
-        _ = placeThird(w)
-        let open = w.handle(.windowAppeared(snap(3, pid: 300)))
-        let reference = twoWindows()
-        let referenceOpen = reference.handle(.windowAppeared(snap(3, pid: 300)))
-        #expect(frames(open) == frames(referenceOpen))
-    }
-
-    @Test func movingFocusIntoThePlacedWindowReturnsItToItsTile() {
-        let w = twoWindows()
-        _ = placeThird(w)
-        _ = w.run(.focusWindow(.address(1)))
-        #expect(w.windows[2]?.placedFrame != nil)
-        let back = w.run(.focusWindow(.address(2)))
-        #expect(w.windows[2]?.placedFrame == nil)
-        #expect(frames(back.effects)[2] == rightHalf)
-    }
-
-    @Test func aNativeFocusEventIntoThePlacedWindowReturnsItToItsTileButARepeatDoesNot() {
-        let w = twoWindows()
-        _ = placeThird(w)
-        _ = w.handle(.focusChanged(2))
-        #expect(w.windows[2]?.placedFrame != nil)
-        _ = w.handle(.focusChanged(1))
-        let click = w.handle(.focusChanged(2))
-        #expect(w.windows[2]?.placedFrame == nil)
-        #expect(frames(click)[2] == rightHalf)
-    }
-
-    @Test func dispatchersActingOnThePlacedWindowReturnItToItsTile() {
-        let commands: [Command] = [
-            .floating(.toggle, .active), .floating(.set, .active), .floating(.unset, .active), .fullscreen(mode: 0, .toggle),
-            .fullscreen(mode: 1, .toggle), .pseudo(.active), .moveWindow(.direction(.left), silent: false), .swapWindow(.direction(.left)),
-            .resizeActive(.relative(.pixels(40), .pixels(0))), .resizeActive(.relative(.pixels(0), .pixels(0))),
-            .resizeActive(.exact(.percent(40), .percent(100))), .layoutMessage("togglesplit"),
-            .moveToWorkspace(.id(2), .active, silent: false), .moveWindow(.monitor(.relative(1)), silent: true),
-        ]
-        for command in commands {
-            let w = world(monitors: [laptop, ultrawide])
-            _ = w.handle(.windowAppeared(snap(1)))
-            _ = w.handle(.windowAppeared(snap(2, pid: 200)))
-            _ = placeThird(w)
-            #expect(w.windows[2]?.placedFrame != nil)
-            let r = w.run(command)
-            #expect(w.windows[2]?.placedFrame == nil, "\(command) \(r.reply)")
-            #expect(w.windows[2]?.placedSlot == nil)
-        }
-    }
-
-    @Test func settingTiledOnAPlacedTiledWindowSnapsItBack() {
-        let w = twoWindows()
-        _ = placeThird(w)
-        let r = w.run(.floating(.unset, .active))
-        #expect(frames(r.effects)[2] == rightHalf)
-        #expect(w.windows[2]?.isFloating == false)
-    }
-
-    @Test func togglingFloatingTwiceLeavesNoOverride() {
-        let w = twoWindows()
-        _ = placeThird(w)
-        _ = w.run(.floating(.toggle, .active))
-        #expect(w.windows[2]?.isFloating == true)
-        let back = w.run(.floating(.toggle, .active))
-        #expect(frames(back.effects)[2] == rightHalf)
-        #expect(w.windows[2]?.placedFrame == nil)
-    }
-
-    @Test func aUserDragClearsTheOverrideAndTheDropSnapsIntoTheTile() {
-        let w = twoWindows()
-        _ = placeThird(w)
-        _ = w.handle(.windowFrameChanged(2, Rect(x: 800, y: 300, width: 504, height: 950), userDriven: true))
-        #expect(w.windows[2]?.placedFrame == nil)
-        let end = w.handle(.dragEnded(cursor: Point(x: 1300, y: 800)))
-        #expect(frames(end)[2] == rightHalf)
-        #expect(w.windows[2]?.appliedFrame == rightHalf)
-    }
-
-    @Test func switchingAwayAndBackKeepsTheOverrideAndParkingToo() {
-        let w = twoWindows()
-        _ = placeThird(w)
-        let placed = w.windows[2]!.placedFrame
-        w.switchWorkspace(2)
-        _ = w.handle(.windowAppeared(snap(3, pid: 300)))
-        #expect(w.focusedWindow == 3)
-        _ = w.takeEffects()
-        w.switchWorkspace(1)
-        let back = w.takeEffects()
-        #expect(w.focusedWindow == 2)
-        #expect(w.windows[2]?.placedFrame == placed)
-        #expect(frames(back)[2] == placed)
-        #expect(frames(back)[1] == leftHalf)
-    }
-
     @Test func placingAFloatingWindowSetsItsFloatingFrameLikeResizeAndMoveExact() {
         let w = twoWindows()
         _ = w.run(.floating(.set, .active))
@@ -229,17 +101,17 @@ func tileFrames(_ w: World) -> [WindowID: Rect] {
         let w = twoWindows()
         _ = placeThird(w)
         let saved = w.snapshot()
-        #expect(saved.windows.allSatisfy { $0.placedFrame == nil && $0.placedSlot == nil })
+        #expect(saved.windows.allSatisfy { $0.placedFrame == nil && $0.placedArea == nil })
         let json = String(decoding: try JSONEncoder().encode(saved), as: UTF8.self)
-        #expect(!json.contains("placedFrame") && !json.contains("placedSlot"))
+        #expect(!json.contains("placedFrame") && !json.contains("placedArea"))
         var tampered = saved
         for i in tampered.windows.indices {
             tampered.windows[i].placedFrame = Rect(x: 1, y: 2, width: 3, height: 4)
-            tampered.windows[i].placedSlot = Rect(x: 1, y: 2, width: 3, height: 4)
+            tampered.windows[i].placedArea = Rect(x: 1, y: 2, width: 3, height: 4)
         }
         let fresh = world()
         let e = fresh.restore(tampered, alive: [snap(1), snap(2, pid: 200)])
-        #expect(fresh.windows.values.allSatisfy { $0.placedFrame == nil && $0.placedSlot == nil })
+        #expect(fresh.windows.values.allSatisfy { $0.placedFrame == nil && $0.placedArea == nil })
         #expect(frames(e)[2] == rightHalf)
     }
 

@@ -314,7 +314,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let world, !paused else { return }
         world.cursor = Screens.cursor()
         execute(world.handle(event))
-        if case .windowFrameChanged(_, _, userDriven: true) = event { updateDropPreview() }
+        switch event {
+        case .windowFrameChanged(_, _, userDriven: true): updateDropPreview()
+        case .dragEnded: dropPreview.hide()
+        default: break
+        }
     }
 
     private func updateDropPreview() {
