@@ -219,7 +219,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func refreshHotkeys() {
         guard let world, !paused else { return }
-        hotkeys.activate(world.activeBinds)
+        hotkeys.activate(world.activeBinds, allBinds: world.config.binds)
         status.update()
     }
 

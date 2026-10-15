@@ -46,7 +46,7 @@ final class HotkeyManager {
         return status == noErr
     }
 
-    func activate(_ binds: [Bind]) {
+    func activate(_ binds: [Bind], allBinds: [Bind]) {
         releaseCarbon()
         failures = []
         let split = HotkeyPlan.split(HotkeyPlan.groups(binds))
@@ -63,7 +63,8 @@ final class HotkeyManager {
                 failures.append(Diagnostic(first.location, "this hotkey could not be registered; another app may own it", isWarning: true))
             }
         }
-        if !keyTap.update(split.tap), let first = split.tap.first?.press.first ?? split.tap.first?.release.first {
+        let anyTap = HotkeyPlan.split(HotkeyPlan.groups(allBinds)).tap
+        if !keyTap.update(split.tap, keepRunning: !anyTap.isEmpty), let first = anyTap.first?.press.first ?? anyTap.first?.release.first {
             failures.append(Diagnostic(first.location, "Option shortcuts need the keyboard tap; it could not start"))
         }
     }
