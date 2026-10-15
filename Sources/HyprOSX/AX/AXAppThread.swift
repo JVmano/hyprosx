@@ -175,8 +175,12 @@ final class AXAppThread {
                 if windows[id] == nil { register(e, id: id) }
             }
         }
-        for (id, e) in Array(windows) where AX.windowID(e) == nil { forget(id) }
+        pruneClosed()
         reportFocused()
+    }
+
+    private func pruneClosed() {
+        for (id, e) in Array(windows) where AX.windowID(e) == nil || !AX.windowExists(id) { forget(id) }
     }
 
     private func register(_ e: AXUIElement, id: WindowID) {
@@ -227,6 +231,7 @@ final class AXAppThread {
         case kAXWindowCreatedNotification:
             if let id = AX.windowID(element), windows[id] == nil { register(element, id: id) }
         case kAXFocusedWindowChangedNotification:
+            pruneClosed()
             reportFocused()
         case kAXUIElementDestroyedNotification:
             if let id = windows.first(where: { CFEqual($0.value, element) })?.key { forget(id) }

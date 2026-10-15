@@ -77,6 +77,11 @@ enum AX {
         AXUIElementPerformAction(e, action as CFString)
     }
 
+    static func windowExists(_ id: WindowID) -> Bool {
+        guard let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(id)) as? [[String: Any]] else { return false }
+        return list.contains { ($0[kCGWindowNumber as String] as? Int).map { WindowID($0) } == id }
+    }
+
     static func windowLevel(_ id: WindowID) -> Int? {
         guard let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(id)) as? [[String: Any]] else { return nil }
         return list.first?[kCGWindowLayer as String] as? Int
