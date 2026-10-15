@@ -6,6 +6,7 @@ final class HotkeyManager {
     private static let signature: OSType = 0x4859_5052
 
     private let run: ([Bind]) -> Void
+    private let keyTap: KeyTap
     private var handler: EventHandlerRef?
     private var refs: [EventHotKeyRef] = []
     private var groups: [UInt32: HotkeyGroup] = [:]
@@ -15,7 +16,10 @@ final class HotkeyManager {
     private var generation = 0
     private(set) var failures: [Diagnostic] = []
 
-    init(run: @escaping ([Bind]) -> Void) { self.run = run }
+    init(run: @escaping ([Bind]) -> Void) {
+        self.run = run
+        keyTap = KeyTap(run: run)
+    }
 
     deinit {
         deactivate()
@@ -43,9 +47,10 @@ final class HotkeyManager {
     }
 
     func activate(_ binds: [Bind]) {
-        deactivate()
+        releaseCarbon()
         failures = []
-        for group in HotkeyPlan.groups(binds) {
+        let split = HotkeyPlan.split(HotkeyPlan.groups(binds))
+        for group in split.carbon {
             let id = nextID
             nextID &+= 1
             var ref: EventHotKeyRef?
@@ -58,9 +63,17 @@ final class HotkeyManager {
                 failures.append(Diagnostic(first.location, "this hotkey could not be registered; another app may own it", isWarning: true))
             }
         }
+        if !keyTap.update(split.tap), let first = split.tap.first?.press.first ?? split.tap.first?.release.first {
+            failures.append(Diagnostic(first.location, "Option shortcuts need the keyboard tap; it could not start"))
+        }
     }
 
     func deactivate() {
+        releaseCarbon()
+        keyTap.stop()
+    }
+
+    private func releaseCarbon() {
         generation += 1
         stopRepeat()
         refs.forEach { UnregisterEventHotKey($0) }

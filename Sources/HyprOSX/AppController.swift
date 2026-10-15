@@ -73,6 +73,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        hotkeys?.deactivate()
         dropPreview.hide()
         guard isSetUp, let world else { return }
         if !paused {
