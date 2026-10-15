@@ -105,13 +105,32 @@ final class AXAppThread {
         if AXObserverCreate(pid, axCallback, &obs) == .success, let obs {
             observer = obs
             CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), .defaultMode)
-            let ref = Unmanaged.passUnretained(self).toOpaque()
-            AXObserverAddNotification(obs, app, kAXWindowCreatedNotification as CFString, ref)
-            AXObserverAddNotification(obs, app, kAXFocusedWindowChangedNotification as CFString, ref)
         }
+        let subscribed = subscribe()
         scan()
         emit(.scanned)
+        if !subscribed { retrySubscribe(delays: [0.1, 0.3, 0.6, 1.2, 2.5, 5]) }
         CFRunLoopRun()
+    }
+
+    private func subscribe() -> Bool {
+        guard let obs = observer else { return false }
+        let ref = Unmanaged.passUnretained(self).toOpaque()
+        let ok: (AXError) -> Bool = { $0 == .success || $0 == .notificationAlreadyRegistered }
+        let created = AXObserverAddNotification(obs, app, kAXWindowCreatedNotification as CFString, ref)
+        let focused = AXObserverAddNotification(obs, app, kAXFocusedWindowChangedNotification as CFString, ref)
+        return ok(created) && ok(focused)
+    }
+
+    private func retrySubscribe(delays: [CFTimeInterval]) {
+        guard let delay = delays.first else { return }
+        let timer = CFRunLoopTimerCreateWithHandler(nil, CFAbsoluteTimeGetCurrent() + delay, 0, 0, 0) { [weak self] _ in
+            guard let self else { return }
+            let subscribed = self.subscribe()
+            self.scan()
+            if !subscribed { self.retrySubscribe(delays: Array(delays.dropFirst())) }
+        }
+        CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .defaultMode)
     }
 
     @discardableResult
