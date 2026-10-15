@@ -43,9 +43,8 @@ public struct KeyTapMatcher: Sendable {
             guard let heldKey = held.removeValue(forKey: keyCode) else { return .pass }
             return KeyTapDecision(consume: true, binds: table[heldKey]?.group.release ?? [])
         case .keyDown where autorepeat:
-            guard let heldKey = held[keyCode] ?? (table[key] != nil ? key : nil) else { return .pass }
-            held[keyCode] = heldKey
-            return KeyTapDecision(consume: true, binds: table[heldKey]?.repeating ?? [])
+            guard let groupKey = held[keyCode] ?? (table[key] != nil ? key : nil) else { return .pass }
+            return KeyTapDecision(consume: true, binds: table[groupKey]?.repeating ?? [])
         case .keyDown:
             guard let entry = table[key] else {
                 held.removeValue(forKey: keyCode)

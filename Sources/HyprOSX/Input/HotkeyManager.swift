@@ -63,9 +63,11 @@ final class HotkeyManager {
                 failures.append(Diagnostic(first.location, "this hotkey could not be registered; another app may own it", isWarning: true))
             }
         }
-        let anyTap = HotkeyPlan.split(HotkeyPlan.groups(allBinds)).tap
-        if !keyTap.update(split.tap, keepRunning: !anyTap.isEmpty), let first = anyTap.first?.press.first ?? anyTap.first?.release.first {
-            failures.append(Diagnostic(first.location, "Option shortcuts need the keyboard tap; it could not start"))
+        if !keyTap.update(split.tap, keepRunning: HotkeyPlan.needsTap(allBinds)) {
+            let anyTap = split.tap.first ?? HotkeyPlan.split(HotkeyPlan.groups(allBinds)).tap.first
+            if let first = anyTap?.press.first ?? anyTap?.release.first {
+                failures.append(Diagnostic(first.location, "Option shortcuts need the keyboard tap; it could not start"))
+            }
         }
     }
 

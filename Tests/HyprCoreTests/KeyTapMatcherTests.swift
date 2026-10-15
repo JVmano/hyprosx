@@ -71,11 +71,19 @@ import Foundation
         #expect(m.handle(.keyUp, keyCode: l, modifiers: .option, autorepeat: false).consume)
     }
 
-    @Test func autorepeatWithoutKeyDownAdoptsAMatchingGroup() {
+    @Test func autorepeatWithoutKeyDownRunsButDoesNotClaimTheKeyUp() {
         var m = matcher(["binde = ALT, l, resizeactive, 40 0"])
         let again = m.handle(.keyDown, keyCode: l, modifiers: .option, autorepeat: true)
         #expect(again.consume && again.binds.count == 1)
-        #expect(m.handle(.keyUp, keyCode: l, modifiers: [], autorepeat: false).consume)
+        #expect(!m.handle(.keyUp, keyCode: l, modifiers: [], autorepeat: false).consume)
+    }
+
+    @Test func plainKeyHeldThenOptionPressedKeepsItsKeyUp() {
+        var m = matcher(["bind = ALT, space, togglefloating"])
+        let space: UInt16 = 0x31
+        #expect(!m.handle(.keyDown, keyCode: space, modifiers: [], autorepeat: false).consume)
+        #expect(m.handle(.keyDown, keyCode: space, modifiers: .option, autorepeat: true).consume)
+        #expect(!m.handle(.keyUp, keyCode: space, modifiers: .option, autorepeat: false).consume)
     }
 
     @Test func nonMatchingEventsAreNeverConsumed() {
