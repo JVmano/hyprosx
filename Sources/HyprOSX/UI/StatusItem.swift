@@ -41,6 +41,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         if !s.errors.isEmpty {
             title.append(NSAttributedString(string: " ●", attributes: [.font: font, .foregroundColor: NSColor.systemRed]))
         }
+        guard item.button?.attributedTitle != title else { return }
         item.button?.attributedTitle = title
     }
 
