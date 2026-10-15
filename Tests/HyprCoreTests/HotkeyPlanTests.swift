@@ -76,4 +76,64 @@ import Foundation
         #expect(groups.map(\.modifiers) == [[], .option])
         #expect(groups.map(\.repeats) == [true, false])
     }
+
+    @Test func optionOnlyAndOptionShiftRouteToTap() {
+        let split = HotkeyPlan.split(HotkeyPlan.groups([
+            bind("bind = ALT, h, movefocus, l"),
+            bind("bind = ALT SHIFT, h, movewindow, l"),
+        ]))
+        #expect(split.tap.map(\.modifiers) == [.option, [.option, .shift]])
+        #expect(split.carbon.isEmpty)
+    }
+
+    @Test func everythingElseStaysOnCarbon() {
+        let split = HotkeyPlan.split(HotkeyPlan.groups([
+            bind("bind = CTRL CMD, 1, workspace, 1"),
+            bind("bind = CMD ALT, x, killactive"),
+            bind("bind = CTRL ALT, left, workspace, e-1"),
+            bind("bind = CMD CTRL ALT, a, killactive"),
+            bind("bind = SHIFT, h, movefocus, l"),
+            bind("bind = , h, movefocus, l", submap: "resize"),
+        ]))
+        #expect(split.carbon.count == 6)
+        #expect(split.tap.isEmpty)
+    }
+
+    @Test func splitKeepsFileOrderAndBinds() {
+        let split = HotkeyPlan.split(HotkeyPlan.groups([
+            bind("bind = ALT, 1, workspace, 1"),
+            bind("bind = CTRL CMD, 1, workspace, 1"),
+            bind("bindr = ALT, 1, exec, true"),
+            bind("binde = ALT SHIFT, l, resizeactive, 40 0"),
+            bind("bind = , Escape, submap, reset", submap: "resize"),
+        ]))
+        #expect(split.tap.map(\.keyCode) == [0x12, 0x25])
+        #expect(split.tap[0].press.map(\.dispatcher) == ["workspace"] && split.tap[0].release.map(\.dispatcher) == ["exec"])
+        #expect(split.tap[1].repeats)
+        #expect(split.carbon.map(\.keyCode) == [0x12, 0x35])
+    }
+
+    @Test func ownerConfigSampleSplit() {
+        let split = HotkeyPlan.split(HotkeyPlan.groups([
+            bind("bind = ALT, h, movefocus, l"),
+            bind("bind = ALT SHIFT, h, movewindow, l"),
+            bind("bind = ALT, 1, workspace, 1"),
+            bind("bind = ALT SHIFT, 1, movetoworkspace, 1"),
+            bind("bind = CTRL CMD, 1, workspace, 1"),
+            bind("bind = CTRL CMD, 1, focusmonitor, 0"),
+            bind("bind = ALT, slash, togglesplit"),
+            bind("bind = ALT, space, togglefloating"),
+            bind("bind = CTRL ALT, left, workspace, e-1"),
+            bind("bind = CTRL ALT, right, workspace, e+1"),
+            bind("bind = ALT, r, submap, resize"),
+            bind("binde = , h, resizeactive, -40 0", submap: "resize"),
+            bind("binde = , l, resizeactive, 40 0", submap: "resize"),
+            bind("bind = , Escape, submap, reset", submap: "resize"),
+            bind("bind = , Return, submap, reset", submap: "resize"),
+        ]))
+        #expect(split.tap.map(\.keyCode) == [0x04, 0x04, 0x12, 0x12, 0x2C, 0x31, 0x0F])
+        #expect(split.tap.allSatisfy { $0.modifiers == .option || $0.modifiers == [.option, .shift] })
+        #expect(split.carbon.map(\.keyCode) == [0x12, 0x7B, 0x7C, 0x04, 0x25, 0x35, 0x24])
+        #expect(split.carbon.map(\.modifiers) == [[.control, .command], [.control, .option], [.control, .option], [], [], [], []])
+    }
 }

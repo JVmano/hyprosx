@@ -27,6 +27,14 @@ public enum HotkeyPlan {
         return groups
     }
 
+    public static func usesTap(_ m: Modifiers) -> Bool {
+        m.contains(.option) && !m.contains(.command) && !m.contains(.control)
+    }
+
+    public static func split(_ groups: [HotkeyGroup]) -> (carbon: [HotkeyGroup], tap: [HotkeyGroup]) {
+        (groups.filter { !usesTap($0.modifiers) }, groups.filter { usesTap($0.modifiers) })
+    }
+
     public static func carbonModifiers(_ m: Modifiers) -> UInt32 {
         (m.contains(.command) ? 0x0100 : 0) | (m.contains(.shift) ? 0x0200 : 0) | (m.contains(.option) ? 0x0800 : 0) | (m.contains(.control) ? 0x1000 : 0)
     }
