@@ -31,6 +31,10 @@ public enum HotkeyPlan {
         m.contains(.option) && !m.contains(.command) && !m.contains(.control)
     }
 
+    public static func needsTap(_ binds: [Bind]) -> Bool {
+        groups(binds).contains { usesTap($0.modifiers) }
+    }
+
     public static func split(_ groups: [HotkeyGroup]) -> (carbon: [HotkeyGroup], tap: [HotkeyGroup]) {
         (groups.filter { !usesTap($0.modifiers) }, groups.filter { usesTap($0.modifiers) })
     }

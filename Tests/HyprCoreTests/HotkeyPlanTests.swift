@@ -136,4 +136,12 @@ import Foundation
         #expect(split.carbon.map(\.keyCode) == [0x12, 0x7B, 0x7C, 0x04, 0x25, 0x35, 0x24])
         #expect(split.carbon.map(\.modifiers) == [[.control, .command], [.control, .option], [.control, .option], [], [], [], []])
     }
+
+    @Test func needsTapWhenAnySubmapHasAnOptionOnlyKeyBind() {
+        #expect(HotkeyPlan.needsTap([bind("bind = CTRL CMD, 1, workspace, 1"), bind("bind = ALT, r, submap, resize")]))
+        #expect(HotkeyPlan.needsTap([bind("bind = , h, movefocus, l", submap: "resize"), bind("bind = ALT SHIFT, h, movewindow, l", submap: "other")]))
+        #expect(!HotkeyPlan.needsTap([bind("bind = CTRL CMD, 1, workspace, 1"), bind("bind = , h, movefocus, l", submap: "resize")]))
+        #expect(!HotkeyPlan.needsTap([bind("bindm = ALT, mouse:272, movewindow")]))
+        #expect(!HotkeyPlan.needsTap([]))
+    }
 }
