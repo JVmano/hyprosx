@@ -151,6 +151,8 @@ final class AXAppThread {
 
     func rescan() { perform { [weak self] in self?.scan() } }
 
+    func prune() { perform { [weak self] in self?.pruneClosed() } }
+
     func flush(timeout: TimeInterval) {
         let done = DispatchSemaphore(value: 0)
         guard perform({ done.signal() }) else { return }

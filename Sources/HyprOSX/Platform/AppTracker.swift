@@ -110,6 +110,7 @@ final class AppTracker {
     }
 
     private func activated(_ app: NSRunningApplication) {
+        for (pid, thread) in threads where pid != app.processIdentifier { thread.prune() }
         if let thread = threads[app.processIdentifier] {
             thread.rescan()
         } else if isTracked(app) {
