@@ -250,6 +250,35 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
         #expect(w.handle(.mouseBindEnded(Point(x: 50, y: 50))).isEmpty)
     }
 
+    @Test func movingAFloatingWindowAcrossMonitorsRelocatesIt() {
+        let w = world(monitors: [laptop, ultrawide])
+        _ = w.handle(.windowAppeared(snap(1)))
+        _ = w.run(try! CommandParser.parse(dispatcher: "setfloating", arguments: "address:0x1").get())
+        let start = w.windows[1]!.floatingFrame
+        let target = Point(x: 2500, y: 400)
+        _ = w.handle(.mouseBindStarted(.move, start.center))
+        _ = w.handle(.mouseBindMoved(target))
+        #expect(w.windows[1]!.workspace == w.activeWorkspace[1])
+        #expect(w.focusedMonitor == 1)
+        #expect(w.windows[1]!.floatingFrame.center == target)
+        _ = w.handle(.mouseBindMoved(target + Point(x: 20, y: 0)))
+        _ = w.handle(.mouseBindEnded(target + Point(x: 20, y: 0)))
+        #expect(w.windows[1]!.workspace == w.activeWorkspace[1])
+        #expect(w.windows[1]!.floatingFrame.center == target + Point(x: 20, y: 0))
+    }
+
+    @Test func aFrameEchoDuringAFloatingDragKeepsTheDraggedFrame() {
+        let w = world()
+        _ = w.handle(.windowAppeared(snap(1)))
+        _ = w.run(try! CommandParser.parse(dispatcher: "setfloating", arguments: "address:0x1").get())
+        let start = w.windows[1]!.floatingFrame
+        _ = w.handle(.mouseBindStarted(.move, start.center))
+        _ = w.handle(.mouseBindMoved(start.center + Point(x: 40, y: 30)))
+        let dragged = w.windows[1]!.floatingFrame
+        _ = w.handle(.windowFrameChanged(1, start, userDriven: false))
+        #expect(w.windows[1]!.floatingFrame == dragged)
+    }
+
     @Test func resizingAFloatingWindowKeepsTheOppositeCorner() {
         let f = Rect(x: 100, y: 100, width: 400, height: 300)
         #expect(World.resizedFloating(f, by: Point(x: -50, y: -20), corner: .topLeft) == Rect(x: 50, y: 80, width: 450, height: 320))

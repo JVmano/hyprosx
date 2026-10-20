@@ -35,8 +35,16 @@ extension World {
         mouseDrag = drag
         switch (drag.action, w.isFloating) {
         case (.move, true):
-            windows[drag.id]?.floatingFrame = Rect(origin: drag.startFrame.origin + total, size: drag.startFrame.size)
-            refresh([ws.id], reason: .manualResize)
+            let frame = Rect(origin: drag.startFrame.origin + total, size: drag.startFrame.size)
+            windows[drag.id]?.floatingFrame = frame
+            var touched: Set<Int> = [ws.id]
+            if let m = monitorID(containing: frame.center), m != ws.monitor, let target = activeSpecial[m] ?? activeWorkspace[m] {
+                relocate(drag.id, to: target)
+                if focusedWindow == drag.id { focusedMonitor = m }
+                touched.insert(target)
+                emit(.statusChanged)
+            }
+            refresh(touched, reason: .manualResize)
         case (.move, false):
             let frame = Rect(origin: drag.startFrame.origin + total, size: drag.startFrame.size)
             windows[drag.id]?.lastFrame = frame

@@ -75,6 +75,11 @@ extension World {
 
     func frameChanged(_ id: WindowID, _ frame: Rect, userDriven: Bool) {
         guard var w = windows[id], w.suspended == nil, !w.isParked else { return }
+        if mouseDrag?.id == id {
+            w.lastFrame = frame
+            windows[id] = w
+            return
+        }
         let fullscreen = w.fullscreenMode != nil
         if w.isFloating && !fullscreen {
             let nearApplied = w.appliedFrame.map { $0.isClose(to: frame) } == true
@@ -95,7 +100,6 @@ extension World {
         }
         w.lastFrame = frame
         windows[id] = w
-        guard mouseDrag?.id != id else { return }
         guard isVisible(w.workspace), let applied = w.appliedFrame, !applied.isClose(to: frame, tolerance: 2) else { return }
         guard userDriven, !fullscreen else {
             if w.refitTarget.map({ !$0.isClose(to: applied) }) ?? true {
