@@ -352,12 +352,17 @@ final class AppController: NSObject, NSApplicationDelegate {
         case .appTerminated(let pid): for w in world.windows.values where w.pid == pid { motion.cancel(w.id) }
         case .windowFrameChanged(let id, let frame, userDriven: true) where motion.isMoving(id):
             event = .windowFrameChanged(id, frame, userDriven: false)
+        case .windowFrameChanged(let id, let frame, _) where !motion.isMoving(id):
+            motion.observed(id, frame)
         default: break
         }
         world.cursor = Screens.cursor()
         execute(world.handle(event))
         switch event {
-        case .windowFrameChanged(_, _, userDriven: true): updateDropPreview()
+        case .windowFrameChanged(let id, let frame, userDriven: true):
+            updateDropPreview()
+            borders.move(id, frame)
+            dims.move(id, frame)
         case .dragEnded: dropPreview.hide()
         default: break
         }

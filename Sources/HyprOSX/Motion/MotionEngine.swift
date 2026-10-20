@@ -83,6 +83,10 @@ final class MotionEngine: NSObject {
         startIfNeeded()
     }
 
+    func observed(_ id: WindowID, _ frame: Rect) {
+        if written[id] != nil { written[id] = frame }
+    }
+
     func cancel(_ id: WindowID) {
         animator.cancel(id)
         written[id] = nil
@@ -90,6 +94,7 @@ final class MotionEngine: NSObject {
     }
 
     func stopAll() {
+        apply(animator.tick(CACurrentMediaTime() + 3600))
         animator = Animator()
         written = [:]
         quietUntil = [:]
