@@ -2,18 +2,25 @@ import AppKit
 import QuartzCore
 import HyprCore
 
+private struct Shape: Equatable {
+    var size: NSSize
+    var width: Double
+    var radius: Double
+}
+
 private final class BorderView: NSView {
     let ring = CAShapeLayer()
     let gradient = CAGradientLayer()
+    var shape: Shape?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        wantsLayer = true
         let root = CALayer()
         root.addSublayer(gradient)
         ring.fillRule = .evenOdd
         root.mask = ring
         layer = root
+        wantsLayer = true
     }
 
     required init?(coder: NSCoder) { nil }
@@ -37,6 +44,7 @@ final class BorderWindows {
     func apply(_ set: DecorationSet, animating: Set<WindowID>, radius: Double, colorTiming: MotionTiming?, angle: (timing: MotionTiming, loop: Bool)?) {
         let radiusChanged = radius != self.radius
         self.radius = radius
+        let primaryHeight = Self.primaryHeight()
         var wanted: [WindowID: Decoration] = [:]
         for d in set.windows where d.border != nil { wanted[d.id] = d }
         for id in entries.keys where wanted[id] == nil {
@@ -50,7 +58,7 @@ final class BorderWindows {
                 if release { pending.remove(id) }
                 if e.state.border != d.border { paint(e.view, d, timing: colorTiming) }
                 if !animating.contains(id), release || radiusChanged || e.state.frame != d.frame || e.state.borderWidth != d.borderWidth {
-                    place(e.window, e.view, frame: d.frame, width: d.borderWidth)
+                    place(e.window, e.view, frame: d.frame, width: d.borderWidth, primaryHeight: primaryHeight)
                 }
                 let activated = d.isActive && !e.state.isActive
                 if activated { spin(e.view, angle) }
@@ -61,7 +69,7 @@ final class BorderWindows {
                 let e = make(d)
                 entries[id] = e
                 paint(e.view, d, timing: nil)
-                place(e.window, e.view, frame: d.frame, width: d.borderWidth)
+                place(e.window, e.view, frame: d.frame, width: d.borderWidth, primaryHeight: primaryHeight)
                 spin(e.view, angle)
                 if animating.contains(id) {
                     pending.insert(id)
@@ -74,7 +82,7 @@ final class BorderWindows {
 
     func move(_ id: WindowID, _ frame: Rect) {
         guard let e = entries[id] else { return }
-        place(e.window, e.view, frame: frame, width: e.state.borderWidth)
+        place(e.window, e.view, frame: frame, width: e.state.borderWidth, primaryHeight: Self.primaryHeight())
         if pending.remove(id) != nil { e.window.order(.below, relativeTo: Int(id)) }
     }
 
@@ -102,9 +110,15 @@ final class BorderWindows {
         return Entry(window: window, view: view, state: d)
     }
 
-    private func place(_ window: NSWindow, _ view: BorderView, frame f: Rect, width w: Double) {
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+    private static func primaryHeight() -> Double {
+        Double(NSScreen.screens.first?.frame.height ?? 0)
+    }
+
+    private func place(_ window: NSWindow, _ view: BorderView, frame f: Rect, width w: Double, primaryHeight: Double) {
         let outer = NSRect(x: f.x - w, y: primaryHeight - f.maxY - w, width: f.width + 2 * w, height: f.height + 2 * w)
+        let shape = Shape(size: outer.size, width: w, radius: radius)
+        guard view.shape != shape else { return window.setFrameOrigin(outer.origin) }
+        view.shape = shape
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         window.setFrame(outer, display: false)

@@ -340,8 +340,9 @@ final class AXAppThread {
         if more { scheduleDrain() }
     }
 
-    func focus(_ id: WindowID) {
+    func focus(_ id: WindowID, done: @escaping () -> Void = {}) {
         perform { [weak self] in
+            defer { DispatchQueue.main.async(execute: done) }
             guard let self, let e = self.windows[id] else { return }
             AX.setBool(e, kAXMainAttribute, true)
             AX.perform(e, kAXRaiseAction)
@@ -350,8 +351,9 @@ final class AXAppThread {
         }
     }
 
-    func raise(_ id: WindowID) {
+    func raise(_ id: WindowID, done: @escaping () -> Void = {}) {
         perform { [weak self] in
+            defer { DispatchQueue.main.async(execute: done) }
             guard let e = self?.windows[id] else { return }
             AX.perform(e, kAXRaiseAction)
         }

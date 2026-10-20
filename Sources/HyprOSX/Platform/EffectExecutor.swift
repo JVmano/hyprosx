@@ -27,11 +27,9 @@ final class EffectExecutor {
             case .park(let parks):
                 motion.park(parks)
             case .focus(let id):
-                thread(id)?.focus(id)
-                onRaised(id)
+                thread(id)?.focus(id) { [weak self] in self?.onRaised(id) }
             case .raise(let id):
-                thread(id)?.raise(id)
-                onRaised(id)
+                thread(id)?.raise(id) { [weak self] in self?.onRaised(id) }
             case .close(let id):
                 thread(id)?.close(id)
             case .signal(let pid, let signal):
