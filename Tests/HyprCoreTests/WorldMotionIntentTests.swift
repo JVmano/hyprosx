@@ -52,6 +52,14 @@ private func twoWorkspaces(_ text: String = "") -> World {
         #expect(slides(hidden)[2] == .special)
     }
 
+    @Test func aSpecialHiddenByAWorkspaceSwitchGlidesOut() {
+        let w = twoWorkspaces("binds {\n hide_special_on_workspace_change = true\n}\n")
+        _ = run(w, "movetoworkspacesilent", "special:magic,address:0x2")
+        _ = run(w, "togglespecialworkspace", "magic")
+        let e = run(w, "workspace", "2")
+        #expect(slides(e)[2] == .special)
+    }
+
     @Test func plainParksCarryNoSlide() {
         let w = twoWorkspaces()
         let e = run(w, "movetoworkspacesilent", "3,address:0x1")

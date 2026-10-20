@@ -114,7 +114,7 @@ extension World {
         }
         if config.bindsOptions.hideSpecialOnWorkspaceChange, let special = activeSpecial[mon] {
             activeSpecial[mon] = nil
-            refresh([special])
+            refresh([special], slide: .special)
             destroyIfUnused(special)
         }
         let leftward = slidesLeft(from: old, to: target, on: mon)
