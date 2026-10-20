@@ -50,6 +50,7 @@ final class AXAppThread {
     private var calls = 0
     private var errors = 0
     private var screenSizes: [Size] = []
+    private var pruneQueued = false
 
     init(pid: pid_t, bundleID: String, appName: String, isAccessory: Bool, onEvent: @escaping (AXAppEvent) -> Void) {
         self.pid = pid
@@ -151,7 +152,24 @@ final class AXAppThread {
 
     func rescan() { perform { [weak self] in self?.scan() } }
 
-    func prune() { perform { [weak self] in self?.pruneClosed() } }
+    func prune() {
+        lock.lock()
+        let queued = pruneQueued
+        pruneQueued = true
+        lock.unlock()
+        guard !queued else { return }
+        let ran = perform { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            self.pruneQueued = false
+            self.lock.unlock()
+            for id in Array(self.windows.keys) where !AX.windowExists(id) { self.forget(id) }
+        }
+        guard !ran else { return }
+        lock.lock()
+        pruneQueued = false
+        lock.unlock()
+    }
 
     func flush(timeout: TimeInterval) {
         let done = DispatchSemaphore(value: 0)
