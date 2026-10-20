@@ -5,23 +5,26 @@ final class EffectExecutor {
     private let tracker: AppTracker
     private let windowPID: (WindowID) -> pid_t?
     private let environment: () -> [String: String]
+    private let motion: MotionEngine
     var onSpawned: (Int, pid_t) -> Void = { _, _ in }
     var onSpawnFailed: (String) -> Void = { _ in }
     var onAppEffect: (Effect) -> Void = { _ in }
 
-    init(tracker: AppTracker, windowPID: @escaping (WindowID) -> pid_t?, environment: @escaping () -> [String: String]) {
+    init(tracker: AppTracker, windowPID: @escaping (WindowID) -> pid_t?, environment: @escaping () -> [String: String],
+         motion: MotionEngine) {
         self.tracker = tracker
         self.windowPID = windowPID
         self.environment = environment
+        self.motion = motion
     }
 
     func execute(_ effects: [Effect]) {
         for effect in effects {
             switch effect {
             case .setFrames(let changes):
-                for c in changes { thread(c.id)?.setFrame(c.id, c.frame) }
+                motion.setFrames(changes)
             case .park(let parks):
-                for p in parks { thread(p.id)?.setPosition(p.id, p.origin) }
+                motion.park(parks)
             case .focus(let id):
                 thread(id)?.focus(id)
             case .raise(let id):

@@ -267,6 +267,14 @@ final class AXAppThread {
 
     func setPosition(_ id: WindowID, _ p: Point) { enqueue(id, .position(p)) }
 
+    func readFrame(_ id: WindowID, _ done: @escaping (Rect?) -> Void) {
+        let queued = perform { [weak self] in
+            let frame = self?.windows[id].flatMap { AX.frame($0) }
+            DispatchQueue.main.async { done(frame) }
+        }
+        if !queued { done(nil) }
+    }
+
     private func enqueue(_ id: WindowID, _ job: FrameJob) {
         lock.lock()
         if case .frame(let pending)? = jobs[id], case .position(let p) = job {

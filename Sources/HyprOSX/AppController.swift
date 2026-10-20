@@ -16,6 +16,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var world: World?
     private var tracker: AppTracker!
     private var executor: EffectExecutor!
+    private var motion: MotionEngine!
     private var hotkeys: HotkeyManager!
     private var mouseUp: MouseUpMonitor!
     private var mouseMonitor: Any?
@@ -77,6 +78,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         dropPreview.hide()
         guard isSetUp, let world else { return }
         if !paused {
+            motion.stopAll()
             execute(world.releaseParked())
             tracker.unhideAllHiddenByUs()
             saveStateNow()
@@ -110,9 +112,13 @@ final class AppController: NSObject, NSApplicationDelegate {
             self?.mouseUp.arm()
         }
         tracker.onInitialScanDone = { [weak self] in self?.finishStartup() }
+        motion = MotionEngine(thread: { [weak self] id in
+            self?.world?.windows[id].flatMap { self?.tracker.threads[$0.pid] }
+        }, world: { [weak self] in self?.world })
+        motion.onSettled = { [weak self] id in self?.readBack(id) }
         executor = EffectExecutor(tracker: tracker, windowPID: { [weak self] id in self?.world?.windows[id]?.pid }, environment: { [weak self] in
             Spawner.environment(base: ProcessInfo.processInfo.environment, extra: self?.world?.config.environment ?? [])
-        })
+        }, motion: motion)
         executor.onSpawned = { [weak self] token, pid in self?.world?.registerSpawn(token: token, pid: pid) }
         executor.onSpawnFailed = { [weak self] message in
             guard let self, !self.runtimeErrors.contains(message) else { return }
@@ -277,6 +283,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
         guard let world else { return }
         dropPreview.hide()
+        motion.stopAll()
         execute(world.releaseParked())
         tracker.unhideAllHiddenByUs()
         saveStateNow()
@@ -313,12 +320,25 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func handle(_ event: PlatformEvent) {
         guard let world, !paused else { return }
+        switch event {
+        case .windowDisappeared(let id): motion.cancel(id)
+        case .appTerminated(let pid): for w in world.windows.values where w.pid == pid { motion.cancel(w.id) }
+        default: break
+        }
         world.cursor = Screens.cursor()
         execute(world.handle(event))
         switch event {
         case .windowFrameChanged(_, _, userDriven: true): updateDropPreview()
         case .dragEnded: dropPreview.hide()
         default: break
+        }
+    }
+
+    private func readBack(_ id: WindowID) {
+        guard let pid = world?.windows[id]?.pid else { return }
+        tracker.threads[pid]?.readFrame(id) { [weak self] frame in
+            guard let frame else { return }
+            self?.handle(.windowFrameChanged(id, frame, userDriven: false))
         }
     }
 
