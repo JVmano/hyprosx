@@ -128,8 +128,8 @@ final class AppController: NSObject, NSApplicationDelegate {
             Spawner.environment(base: ProcessInfo.processInfo.environment, extra: self?.world?.config.environment ?? [])
         }, motion: motion)
         executor.onRaised = { [weak self] id in
-            self?.borders.reorder(id)
             self?.dims.reorder(id)
+            self?.borders.reorder(id)
         }
         executor.onSpawned = { [weak self] token, pid in self?.world?.registerSpawn(token: token, pid: pid) }
         executor.onSpawnFailed = { [weak self] message in
@@ -411,11 +411,14 @@ final class AppController: NSObject, NSApplicationDelegate {
         let angle = Motion.decorationTiming("borderangle", config: c).map { (timing: $0, loop: angleLeaf.style == "loop") }
         let set = world.decorations()
         let animating = motion.animating
+        let ringed = dims.apply(set, animating: animating,
+                                timing: Motion.timing("fadeDim", config: c, environment: MotionEngine.environment),
+                                noAnim: { [weak world] id in world?.motion(for: id).noAnim ?? false },
+                                monitorFrame: { [weak world] id in world?.monitorFrame(of: id) })
         borders.apply(set, animating: animating,
                       radius: c.macos.borderRadius >= 0 ? Double(c.macos.borderRadius) : BorderWindows.defaultRadius(),
                       colorTiming: Motion.decorationTiming("border", config: c), angle: angle)
-        dims.apply(set, animating: animating, timing: Motion.decorationTiming("fadeDim", config: c),
-                   monitorFrame: { [weak world] id in world?.monitorFrame(of: id) })
+        if let ringed { borders.reorder(ringed) }
     }
 
     private func saveStateNow() {
