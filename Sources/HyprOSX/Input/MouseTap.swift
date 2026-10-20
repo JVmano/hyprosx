@@ -3,22 +3,18 @@ import Foundation
 import QuartzCore
 import HyprCore
 
-private func mouseTapCallback(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event: CGEvent, _ info: UnsafeMutableRawPointer?) -> Unmanaged<CGEvent>? {
-    guard let info else { return Unmanaged.passUnretained(event) }
-    let consumed = Unmanaged<MouseTap>.fromOpaque(info).takeUnretainedValue().handle(type, event)
-    return consumed ? nil : Unmanaged.passUnretained(event)
-}
-
 final class MouseTap {
+    private static let mask: CGEventMask = [
+        CGEventType.leftMouseDown, .leftMouseUp, .leftMouseDragged, .rightMouseDown, .rightMouseUp, .rightMouseDragged,
+        .otherMouseDown, .otherMouseUp, .otherMouseDragged, .scrollWheel,
+    ].reduce(0) { $0 | (1 << $1.rawValue) }
+
     private let onDecision: (MouseDecision) -> Void
     private let onLeftUp: () -> Void
     private let lock = NSLock()
+    private let tap = EventTap()
     private var matcher = MouseBindMatcher()
-    private var port: CFMachPort?
-    private var runLoop: CFRunLoop?
     private var generation = 0
-    private let ready = DispatchSemaphore(value: 0)
-    private let finished = DispatchSemaphore(value: 0)
 
     init(onDecision: @escaping (MouseDecision) -> Void, onLeftUp: @escaping () -> Void) {
         self.onDecision = onDecision
@@ -32,18 +28,11 @@ final class MouseTap {
             stop()
             return true
         }
-        lock.lock()
-        let current = port
-        lock.unlock()
-        if let current, !CGEvent.tapIsEnabled(tap: current) {
-            CGEvent.tapEnable(tap: current, enable: true)
-            if !CGEvent.tapIsEnabled(tap: current) { stop() }
-        }
+        if !tap.ensureEnabled() { stop() }
         lock.lock()
         matcher.setBinds(binds, dragThreshold: dragThreshold, scrollEventDelayMs: scrollEventDelayMs)
-        let running = port != nil
         lock.unlock()
-        return running || start()
+        return tap.isRunning || start()
     }
 
     func stop() {
@@ -51,48 +40,13 @@ final class MouseTap {
         lock.lock()
         matcher = MouseBindMatcher()
         generation += 1
-        let stopped = (port: port, runLoop: runLoop)
-        port = nil
-        runLoop = nil
         lock.unlock()
-        guard let port = stopped.port else { return }
-        onDecision(.end(cursor))
-        CGEvent.tapEnable(tap: port, enable: false)
-        CFMachPortInvalidate(port)
-        if let rl = stopped.runLoop {
-            CFRunLoopStop(rl)
-            _ = finished.wait(timeout: .now() + 1)
-        }
+        if tap.isRunning { onDecision(.end(cursor)) }
+        tap.stop()
     }
 
-    private static let mask: CGEventMask = [
-        CGEventType.leftMouseDown, .leftMouseUp, .leftMouseDragged, .rightMouseDown, .rightMouseUp, .rightMouseDragged,
-        .otherMouseDown, .otherMouseUp, .otherMouseDragged, .scrollWheel,
-    ].reduce(0) { $0 | (1 << $1.rawValue) }
-
     private func start() -> Bool {
-        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
-                                           eventsOfInterest: Self.mask, callback: mouseTapCallback,
-                                           userInfo: Unmanaged.passUnretained(self).toOpaque()),
-              let source = CFMachPortCreateRunLoopSource(nil, port, 0) else { return false }
-        lock.lock()
-        self.port = port
-        lock.unlock()
-        let thread = Thread { [self] in
-            lock.lock()
-            runLoop = CFRunLoopGetCurrent()
-            lock.unlock()
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-            CGEvent.tapEnable(tap: port, enable: true)
-            ready.signal()
-            CFRunLoopRun()
-            finished.signal()
-        }
-        thread.name = "HyprOSX mouse tap"
-        thread.qualityOfService = .userInteractive
-        thread.start()
-        _ = ready.wait(timeout: .now() + 2)
-        return true
+        tap.start(mask: Self.mask, name: "HyprOSX mouse tap") { [weak self] type, event in self?.handle(type, event) ?? false }
     }
 
     private static func modifiers(_ flags: CGEventFlags) -> Modifiers {
@@ -127,15 +81,14 @@ final class MouseTap {
         }
     }
 
-    fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
+    private func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             let cursor = Screens.cursor()
             lock.lock()
             let ended = matcher.cancel(at: cursor)
-            let port = port
             let generation = generation
             lock.unlock()
-            if let port { CGEvent.tapEnable(tap: port, enable: true) }
+            tap.reenable()
             if case .end = ended { deliver([ended], generation: generation) }
             return false
         }
