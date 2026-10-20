@@ -151,6 +151,12 @@ public struct DwindleLayout: TiledLayout, Equatable, Codable, Sendable {
         nodes[p] = nil
     }
 
+    mutating func adoptRatios(from other: DwindleLayout) {
+        for (key, node) in other.nodes where !node.children.isEmpty && nodes[key]?.children.isEmpty == false {
+            nodes[key]?.ratio = node.ratio
+        }
+    }
+
     public mutating func swap(_ a: WindowID, _ b: WindowID) {
         guard let la = leaf(of: a), let lb = leaf(of: b) else { return }
         nodes[la]?.window = b

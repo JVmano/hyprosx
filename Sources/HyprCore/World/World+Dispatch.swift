@@ -298,7 +298,8 @@ extension World {
     func resize(_ id: WindowID, _ p: ResizeParam) -> String? {
         guard let w = windows[id], var ws = workspaces[w.workspace] else { return "no matching window" }
         let area = workArea(for: ws)
-        let current = w.isFloating ? w.floatingFrame : (idealBoxes(ws)[id] ?? w.lastFrame)
+        let placements = w.isFloating ? [:] : activePlacements(ws, area: area)
+        let current = w.isFloating ? w.floatingFrame : (placements[id] ?? idealBoxes(ws)[id] ?? w.lastFrame)
         var size: Size
         switch p {
         case .relative(let dx, let dy):
@@ -310,6 +311,8 @@ extension World {
                     height: min(max(World.minimumWindowSize, size.height), World.extent))
         if w.isFloating {
             windows[id]?.floatingFrame = Rect(x: current.x, y: current.y, width: size.width, height: size.height).rounded()
+        } else if !placements.isEmpty {
+            resizeAmongPlacements(id, in: &ws, placements: placements, size: size, current: current)
         } else {
             let delta = Point(x: size.width - current.width, y: size.height - current.height)
             let ctx = layoutContext(ws)
