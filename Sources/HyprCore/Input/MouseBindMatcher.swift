@@ -59,7 +59,9 @@ public struct MouseBindMatcher: Sendable {
         let matching = binds.filter { $0.trigger == trigger && $0.modifiers == mods }
         guard !matching.isEmpty else { return .pass }
         claimed.insert(button)
-        if let drag = matching.first(where: { $0.flags.contains(.mouse) }), let action = Self.action(drag.dispatcher) {
+        if let drag = matching.first(where: { $0.flags.contains(.mouse) && Self.action($0.dispatcher) != nil }),
+           let action = Self.action(drag.dispatcher) {
+            guard press == nil else { return .consume }
             press = Press(button: button, action: action, origin: p, started: threshold == 0)
             return threshold == 0 ? .start(action, p) : .consume
         }

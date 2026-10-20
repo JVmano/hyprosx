@@ -12,6 +12,7 @@ struct MouseDrag: Equatable, Sendable {
 extension World {
     func mouseBindStarted(_ action: MouseBindAction, at p: Point) {
         cursor = p
+        mouseDrag = nil
         guard let id = windowAt(p), let w = windows[id], w.suspended == nil, w.fullscreenMode == nil else { return }
         let frame = w.appliedFrame ?? w.lastFrame
         let left = p.x < frame.center.x, top = p.y < frame.center.y

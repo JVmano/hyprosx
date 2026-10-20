@@ -95,6 +95,7 @@ extension World {
         }
         w.lastFrame = frame
         windows[id] = w
+        guard mouseDrag?.id != id else { return }
         guard isVisible(w.workspace), let applied = w.appliedFrame, !applied.isClose(to: frame, tolerance: 2) else { return }
         guard userDriven, !fullscreen else {
             if w.refitTarget.map({ !$0.isClose(to: applied) }) ?? true {

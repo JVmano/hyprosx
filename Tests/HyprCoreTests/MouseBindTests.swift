@@ -64,6 +64,21 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
         #expect(m.scroll(.up, modifiers: mods, now: 11) == .pass)
     }
 
+    @Test func aSecondDragPressKeepsTheActiveDrag() {
+        var m = matcher()
+        #expect(m.down(button: 0, modifiers: mods, at: .zero) == .start(.move, .zero))
+        #expect(m.down(button: 1, modifiers: mods, at: Point(x: 3, y: 3)) == .consume)
+        #expect(m.up(button: 1, modifiers: mods, at: Point(x: 3, y: 3)) == .consume)
+        #expect(m.dragged(to: Point(x: 4, y: 4)) == .move(Point(x: 4, y: 4)))
+        #expect(m.up(button: 0, modifiers: mods, at: Point(x: 4, y: 4)) == .end(Point(x: 4, y: 4)))
+    }
+
+    @Test func aDragBindWithAnUnknownDispatcherDoesNotShadowAValidOne() {
+        var m = MouseBindMatcher()
+        m.setBinds([bind("bindm", "CTRL ALT, mouse:272, bogus"), move], dragThreshold: 0, scrollEventDelayMs: 0)
+        #expect(m.down(button: 0, modifiers: mods, at: .zero) == .start(.move, .zero))
+    }
+
     @Test func keyBindsAreIgnored() {
         var m = MouseBindMatcher()
         m.setBinds([bind("bind", "ALT, H, movefocus, l")], dragThreshold: 0, scrollEventDelayMs: 0)
@@ -107,6 +122,37 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
         _ = w.handle(.mouseBindMoved(grip + Point(x: 100, y: 0)))
         _ = w.handle(.mouseBindEnded(grip + Point(x: 100, y: 0)))
         #expect(abs(w.windows[1]!.appliedFrame!.width - (left.width + 100)) <= 2)
+    }
+
+    @Test func aBindDragOwnsItsWindowFrameAgainstAxEchoes() {
+        let w = pair()
+        let left = w.windows[1]!.appliedFrame!
+        let grip = Point(x: left.maxX - 10, y: left.center.y + 10)
+        _ = w.handle(.mouseBindStarted(.resize, grip))
+        _ = w.handle(.mouseBindMoved(grip + Point(x: 60, y: 0)))
+        let echo = w.handle(.windowFrameChanged(1, Rect(x: 0, y: 40, width: 300, height: 300), userDriven: false))
+        let layoutSteps = echo.flatMap { effect -> [FrameChange] in
+            if case .setFrames(let changes) = effect { return changes.filter { $0.id == 1 && $0.reason == .layout } }
+            return []
+        }
+        #expect(layoutSteps.isEmpty)
+    }
+
+    @Test func aBindDragDropsThePlacementOfItsWindow() {
+        let w = ownerWorld()
+        _ = placeOwner(w, width: 33.33, x: 33.33)
+        #expect(w.windows[1]!.placedFrame != nil)
+        let frame = w.windows[1]!.appliedFrame!
+        _ = w.handle(.mouseBindStarted(.move, frame.center))
+        #expect(w.windows[1]!.placedFrame == nil)
+    }
+
+    @Test func aFailedStartLeavesNoStaleDrag() {
+        let w = pair()
+        _ = w.handle(.mouseBindStarted(.move, w.windows[1]!.appliedFrame!.center))
+        #expect(w.mouseDrag != nil)
+        _ = w.handle(.mouseBindStarted(.move, Point(x: 5000, y: 5000)))
+        #expect(w.mouseDrag == nil)
     }
 
     @Test func aDragOverEmptySpaceDoesNothing() {
