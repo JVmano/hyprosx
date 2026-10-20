@@ -17,6 +17,7 @@ public struct DecorationOptions: Equatable, Sendable {
     public var rounding = 0
     public var dimInactive = false
     public var dimStrength = 0.5
+    public var dimAround = 0.4
     public init() {}
 }
 
@@ -177,6 +178,7 @@ enum OptionRegistry {
         int("decoration:rounding", \.decoration.rounding)
         bool("decoration:dim_inactive", \.decoration.dimInactive)
         float("decoration:dim_strength", \.decoration.dimStrength)
+        float("decoration:dim_around", \.decoration.dimAround)
         bool("animations:enabled", \.animationsOptions.enabled)
         bool("animations:workspace_wraparound", \.animationsOptions.workspaceWraparound)
         int("input:follow_mouse", \.input.followMouse)
@@ -238,7 +240,7 @@ enum OptionRegistry {
         "general:extend_border_grab_area", "general:hover_icon_on_border", "general:allow_tearing", "general:resize_corner",
         "general:modal_parent_blocking", "general:locale",
         "decoration:rounding_power", "decoration:active_opacity", "decoration:inactive_opacity", "decoration:fullscreen_opacity",
-        "decoration:dim_modal", "decoration:dim_special", "decoration:dim_around", "decoration:screen_shader",
+        "decoration:dim_modal", "decoration:dim_special", "decoration:screen_shader",
         "decoration:border_part_of_window",
         "input:kb_model", "input:kb_layout", "input:kb_variant", "input:kb_options", "input:kb_rules", "input:kb_file",
         "input:numlock_by_default", "input:resolve_binds_by_sym", "input:repeat_rate", "input:repeat_delay", "input:sensitivity",
