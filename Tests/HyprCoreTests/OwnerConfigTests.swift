@@ -21,6 +21,11 @@ import Foundation
             == ["33.33% 100% 0 0", "33.33% 100% 33.33% 0", "33.33% 100% 66.67% 0", "50% 100% 0 0", "50% 100% 50% 0"])
         #expect(config.binds.filter { $0.dispatcher == "setfloating" }.isEmpty)
         #expect(config.binds.filter { $0.dispatcher == "moveactive" }.isEmpty)
+        #expect(abs((Motion.timing("windowsIn", config: config, environment: MotionEnvironment())?.duration ?? 0) - 0.41) < 1e-9)
+        #expect(config.animations.leaf("windowsIn").style == "popin 87%")
+        #expect(config.animations.leaf("workspacesIn").style == "fade")
+        #expect(Motion.decorationTiming("border", config: config) != nil)
+        #expect(config.binds.filter { $0.flags.contains(.mouse) }.map(\.dispatcher) == ["movewindow", "resizewindow"])
         for bind in config.binds where !bind.flags.contains(.mouse) {
             #expect((try? CommandParser.parse(dispatcher: bind.dispatcher, arguments: bind.arguments).get()) != nil, "\(bind.dispatcher) \(bind.arguments)")
         }

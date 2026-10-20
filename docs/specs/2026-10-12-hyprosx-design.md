@@ -245,7 +245,7 @@ Selectors: id, `name:`, `special:`, and the filters `r[A-B]`, `s[bool]`, `n[...]
 
 ### 11.2 Engine
 
-- A per-screen `CADisplayLink` runs only while at least one animation is active.
+- A per-screen `CADisplayLink` runs only while at least one animation is active. M2 uses one display link from the main screen; a second link per screen comes when a mixed-refresh setup shows stutter.
 - Each window frame is an animated value with Hyprland retarget semantics: a new goal starts from the current value with a fresh timer.
 - Every tick computes each animating window's frame and hands it to the app's thread. Each window has one pending-frame slot; a busy app skips to the newest frame and never builds a queue.
 - The border window of an animating window takes the computed frame on every tick, so the outline moves smoothly even when the app lags.
@@ -280,6 +280,7 @@ Window open happens after macOS shows the window, so the window can appear for o
 
 - Each managed visible window has one border window: borderless, transparent, click-through, ordered directly below the target window with `order(.below, relativeTo:)`, re-ordered after the target is raised.
 - The ring is a Core Animation shape: outer edge `border_size` outside the AX frame, inner radius equal to the window's corner radius. Gradients use `col.active_border` or `col.inactive_border` (or the `border_color` rule) with the angle. `border_size 0` or a fullscreen window means no border window.
+- macOS has no public API for a window's corner radius. With `macos:border_radius = -1` the ring uses 16 pt on macOS 26 and later and 10 pt before.
 - When the inactive color is fully transparent, inactive windows get no border window at all.
 - `decoration:dim_inactive` adds one click-through dim window ordered directly above each inactive tiled window, with `dim_strength` as alpha. `dim_around` adds one full-screen dim window ordered directly below the target.
 - Border windows of parked windows are ordered out.
