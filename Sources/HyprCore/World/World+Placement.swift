@@ -107,14 +107,11 @@ extension World {
         guard !placements.isEmpty else { return ws.layout.current.tileBoxes(ctx) }
         let gaps = gapsIn(for: ws)
         var out: [WindowID: Rect] = [:]
-        var clipped: [Rect] = []
         for id in ws.tiledIDs {
             guard let rect = placements[id], let inside = World.clip(rect, to: area) else { continue }
-            clipped.append(inside)
             out[id] = World.clip(World.inflated(inside, in: area, gaps: gaps), to: area) ?? inside
         }
-        let found = World.freeStrips(placed: clipped, in: area, gaps: gaps)
-        let strips = found.isEmpty ? [area] : found
+        let strips = placementStrips(ws, placements: placements.filter { out[$0.key] != nil }, area: area)
         var rest = ws.layout
         for id in placements.keys { rest.update { $0.remove(id) } }
         if strips.count == 1 {

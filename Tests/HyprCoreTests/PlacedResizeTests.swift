@@ -131,6 +131,14 @@ private func leftPlaced(windows: Int = 3) -> World {
         #expect(g[2]?.width == 100 && g[3]?.width == 100)
     }
 
+    @Test func theStripLimitCountsTheBorder() {
+        let w = ownerWorld(extra: "general:border_size = 2\n")
+        _ = placeOwner(w, width: 33.33, x: 0)
+        _ = w.run(.resizeActive(.relative(.pixels(2000), .pixels(0))))
+        let f = tileFrames(w)
+        #expect(f[2]?.width == 100 && f[3]?.width == 100)
+    }
+
     @Test func anEmptyStripDoesNotLimitTheGrowth() {
         let w = centerPlaced(windows: 2)
         _ = w.run(.resizeActive(.relative(.pixels(2000), .pixels(0))))

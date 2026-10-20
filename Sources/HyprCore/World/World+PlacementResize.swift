@@ -19,6 +19,7 @@ struct PlacementResize {
     let gaps: Edges
     var rects: [WindowID: Rect]
     let rest: [Rect]
+    var border = 0.0
 
     static func fit(lo: Double, hi: Double, length: Double, anchor: PlacementAnchor, floor: Double, ceil: Double) -> (lo: Double, hi: Double) {
         let floor = min(floor, lo), ceil = max(ceil, hi)
@@ -67,11 +68,11 @@ struct PlacementResize {
         let after = rest.contains { across($0, rect, axis) && $0.lo(axis) >= rect.hi(axis) - tol && $0.hi(axis) <= ceil + tol }
         if before {
             let open = floor == area.lo(axis)
-            floor = (open ? floor : floor + g.hi) + g.lo + PlacementResize.minimumSize + (open ? 0 : g.lo) + g.hi
+            floor = (open ? floor : floor + g.hi) + g.lo + PlacementResize.minimumSize + 2 * border + (open ? 0 : g.lo) + g.hi
         }
         if after {
             let open = ceil == area.hi(axis)
-            ceil = (open ? ceil : ceil - g.lo) - g.hi - PlacementResize.minimumSize - g.lo - (open ? 0 : g.hi)
+            ceil = (open ? ceil : ceil - g.lo) - g.hi - PlacementResize.minimumSize - 2 * border - g.lo - (open ? 0 : g.hi)
         }
         return (floor, ceil)
     }
@@ -105,7 +106,7 @@ extension World {
         let area = workArea(for: ws)
         let boxes = effectiveBoxes(ws)
         var plan = PlacementResize(area: area, gaps: gapsIn(for: ws), rects: placements,
-                                   rest: ws.tiledIDs.filter { placements[$0] == nil }.compactMap { boxes[$0] })
+                                   rest: ws.tiledIDs.filter { placements[$0] == nil }.compactMap { boxes[$0] }, border: borderSize(for: ws))
         if let rect = placements[id] {
             for axis in [PlacementAxis.x, .y] {
                 guard let anchor = plan.anchor(of: plan.rects[id] ?? rect, axis) else { continue }
