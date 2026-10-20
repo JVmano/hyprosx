@@ -106,9 +106,10 @@ extension World {
         let leftMoved = abs(frame.minX - applied.minX) > 2, rightMoved = abs(frame.maxX - applied.maxX) > 2
         let topMoved = abs(frame.minY - applied.minY) > 2, bottomMoved = abs(frame.maxY - applied.maxY) > 2
         let resized = abs(frame.width - applied.width) > 2 || abs(frame.height - applied.height) > 2
+        let continuingResize = dragging == id && dragIsResize
         dragging = id
         guard resized, var ws = workspaces[w.workspace] else {
-            dragIsResize = false
+            dragIsResize = continuingResize
             return
         }
         dragIsResize = true

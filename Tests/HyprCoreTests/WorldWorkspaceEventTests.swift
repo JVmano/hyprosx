@@ -181,6 +181,16 @@ func twoWindows(_ text: String = "") -> World {
         #expect(frames(end).isEmpty)
     }
 
+    @Test func aResizeDragStaysAResizeWhenAMoveOnlyEventArrives() {
+        let w = twoWindows()
+        _ = w.handle(.windowFrameChanged(2, Rect(x: 700, y: 32, width: 812, height: 950), userDriven: true))
+        _ = w.handle(.windowFrameChanged(2, Rect(x: 650, y: 32, width: 812, height: 950), userDriven: true))
+        let end = w.handle(.dragEnded(cursor: Point(x: 400, y: 500)))
+        #expect(w.windows[2]?.workspace == 1)
+        #expect(frames(end)[1] == nil || frames(end)[1]!.maxX <= 700)
+        #expect(w.dropPreview(cursor: Point(x: 400, y: 500)) == nil)
+    }
+
     @Test func userMoveDropsOnAnotherTile() {
         let w = twoWindows()
         _ = w.handle(.windowFrameChanged(1, Rect(x: 300, y: 200, width: 756, height: 950), userDriven: true))
