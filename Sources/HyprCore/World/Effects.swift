@@ -1,6 +1,8 @@
 import Foundation
 
-public enum FrameReason: Equatable, Sendable { case layout, open, workspaceIn(leftward: Bool), restore }
+public enum FrameReason: Equatable, Sendable { case layout, open, workspaceIn(leftward: Bool), specialIn, manualResize, restore }
+
+public enum SlideOut: Equatable, Sendable { case workspace(leftward: Bool), special }
 
 public struct FrameChange: Equatable, Sendable {
     public var id: WindowID
@@ -12,7 +14,8 @@ public struct FrameChange: Equatable, Sendable {
 public struct ParkRequest: Equatable, Sendable {
     public var id: WindowID
     public var origin: Point
-    public init(id: WindowID, origin: Point) { self.id = id; self.origin = origin }
+    public var slide: SlideOut?
+    public init(id: WindowID, origin: Point, slide: SlideOut? = nil) { self.id = id; self.origin = origin; self.slide = slide }
 }
 
 public enum Effect: Equatable, Sendable {

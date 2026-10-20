@@ -117,9 +117,10 @@ extension World {
             refresh([special])
             destroyIfUnused(special)
         }
-        refresh([target], reason: .workspaceIn(leftward: target > (old ?? target)))
+        let leftward = slidesLeft(from: old, to: target, on: mon)
+        refresh([target], reason: .workspaceIn(leftward: leftward))
         if let old {
-            refresh([old])
+            refresh([old], slide: .workspace(leftward: leftward))
             destroyIfUnused(old)
         }
         let next = workspaces[target]
@@ -138,7 +139,7 @@ extension World {
             if let other = activeSpecial.first(where: { $0.value == id })?.key { activeSpecial[other] = nil }
             if let previous = activeSpecial[mon] {
                 activeSpecial[mon] = nil
-                refresh([previous])
+                refresh([previous], slide: .special)
                 destroyIfUnused(previous)
             }
             let from = workspaces[id].flatMap { monitor($0.monitor) }
@@ -146,7 +147,7 @@ extension World {
             workspaces[id]?.homeMonitorName = info.name
             shiftFloating(windowIDs(inWorkspace: id), from: from?.frame, to: info.frame)
             activeSpecial[mon] = id
-            refresh([id], reason: .workspaceIn(leftward: true))
+            refresh([id], reason: .specialIn)
             for w in workspaces[id]?.windowIDs ?? [] { emit(.raise(w)) }
             if let c = focusing ?? workspaces[id]?.lastFocused ?? workspaces[id]?.windowIDs.first {
                 focusWindow(c, warp: false, emitEffect: emitFocus)
@@ -154,7 +155,7 @@ extension World {
         } else {
             guard shown else { return }
             activeSpecial[mon] = nil
-            refresh([id])
+            refresh([id], slide: .special)
             if mon == focusedMonitor || focusedWindow == nil {
                 let regular = activeWorkspace[mon].flatMap { workspaces[$0] }
                 focusWindow(regular?.lastFocused ?? regular?.windowIDs.first, warp: false, emitEffect: emitFocus)

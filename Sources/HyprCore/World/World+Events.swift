@@ -120,7 +120,7 @@ extension World {
         ws.layout.update { $0.resize(id, by: delta, corner: corner, ctx) }
         workspaces[ws.id] = ws
         windows[id]?.appliedFrame = frame
-        refresh([ws.id], skip: id)
+        refresh([ws.id], reason: .manualResize, skip: id)
     }
 
     @discardableResult

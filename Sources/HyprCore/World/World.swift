@@ -223,7 +223,7 @@ public final class World {
         windows.values.filter { $0.workspace == wsID }.map(\.id).sorted()
     }
 
-    func refresh(_ ids: Set<Int>, reason: FrameReason = .layout, opened: WindowID? = nil, skip: WindowID? = nil) {
+    func refresh(_ ids: Set<Int>, reason: FrameReason = .layout, opened: WindowID? = nil, skip: WindowID? = nil, slide: SlideOut? = nil) {
         var changes: [FrameChange] = []
         var parkList: [ParkRequest] = []
         for wsID in ids.sorted() {
@@ -245,7 +245,7 @@ public final class World {
                 for id in ws.windowIDs {
                     guard var w = windows[id], !w.isParked, w.suspended == nil else { continue }
                     let size = (w.appliedFrame ?? w.lastFrame).size
-                    parkList.append(ParkRequest(id: id, origin: Parking.origin(windowSize: size, monitor: mon, among: monitors, bundleID: w.bundleID)))
+                    parkList.append(ParkRequest(id: id, origin: Parking.origin(windowSize: size, monitor: mon, among: monitors, bundleID: w.bundleID), slide: slide))
                     w.isParked = true
                     windows[id] = w
                 }
@@ -323,16 +323,7 @@ public final class World {
     }
 
     func staticOutcome(for w: ManagedWindow) -> StaticRuleOutcome {
-        var rules = config.windowRules
-        if let extra = pidRules[w.pid] {
-            for part in extra.split(separator: ";") {
-                let text = part.trimmingCharacters(in: .whitespaces) + ", match:class .*"
-                if let rule = WindowRuleParser.parse(keyword: "windowrule", value: text, location: SourceLocation(file: "exec", line: 0)).rule {
-                    rules.append(rule)
-                }
-            }
-        }
-        return RuleEngine.staticOutcome(rules, facts(for: w))
+        RuleEngine.staticOutcome(windowRules(forPID: w.pid), facts(for: w))
     }
 
     func resolveRuleWorkspace(_ selector: String) -> Int? {
