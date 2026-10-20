@@ -374,6 +374,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func runBinds(_ binds: [Bind]) {
         guard let world, !paused, !binds.isEmpty else { return }
+        tracker.pruneAll()
         world.cursor = Screens.cursor()
         var effects: [Effect] = []
         for bind in binds {
@@ -452,6 +453,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func ipc(_ raw: String) -> String {
         guard let world else { return "HyprOSX is waiting for Accessibility permission" }
         if paused { return "HyprOSX is paused" }
+        tracker.pruneAll()
         world.cursor = Screens.cursor()
         let autoreload = world.config.misc.disableAutoreload
         let reply = IPCResponder.handle(raw, world: world, version: Self.version, configErrors: allErrors, perfReport: { perfReport() })

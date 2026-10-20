@@ -110,7 +110,7 @@ final class AppTracker {
     }
 
     private func activated(_ app: NSRunningApplication) {
-        for (pid, thread) in threads where pid != app.processIdentifier { thread.prune() }
+        pruneAll(except: app.processIdentifier)
         if let thread = threads[app.processIdentifier] {
             thread.rescan()
         } else if isTracked(app) {
@@ -118,6 +118,10 @@ final class AppTracker {
         } else {
             onEvent(.focusChanged(nil))
         }
+    }
+
+    func pruneAll(except pid: pid_t? = nil) {
+        for (p, thread) in threads where p != pid { thread.prune() }
     }
 
     private func hidden(_ app: NSRunningApplication) {
