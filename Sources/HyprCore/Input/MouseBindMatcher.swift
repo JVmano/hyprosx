@@ -92,6 +92,13 @@ public struct MouseBindMatcher: Sendable {
         return onRelease.isEmpty ? .consume : .run(onRelease)
     }
 
+    public mutating func cancel(at p: Point) -> MouseDecision {
+        let started = press?.started == true
+        press = nil
+        claimed = []
+        return started ? .end(p) : .pass
+    }
+
     public mutating func scroll(_ direction: ScrollDirection, modifiers: Modifiers, now: Double) -> MouseDecision {
         let mods = Self.clean(modifiers)
         let matching = binds.filter { $0.trigger == .scroll(direction) && $0.modifiers == mods }

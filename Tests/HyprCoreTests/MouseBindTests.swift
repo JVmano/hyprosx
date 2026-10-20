@@ -79,6 +79,23 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
         #expect(m.down(button: 0, modifiers: mods, at: .zero) == .start(.move, .zero))
     }
 
+    @Test func cancellingAStartedDragEndsItAndClearsThePress() {
+        var m = matcher()
+        _ = m.down(button: 0, modifiers: mods, at: .zero)
+        #expect(m.cancel(at: Point(x: 7, y: 7)) == .end(Point(x: 7, y: 7)))
+        #expect(m.up(button: 0, modifiers: mods, at: Point(x: 7, y: 7)) == .pass)
+        #expect(m.dragged(to: Point(x: 8, y: 8)) == .pass)
+        #expect(m.down(button: 1, modifiers: mods, at: .zero) == .start(.resize, .zero))
+    }
+
+    @Test func cancellingWithoutAStartedDragPasses() {
+        var m = matcher(threshold: 10)
+        #expect(m.cancel(at: .zero) == .pass)
+        _ = m.down(button: 0, modifiers: mods, at: .zero)
+        #expect(m.cancel(at: .zero) == .pass)
+        #expect(m.up(button: 0, modifiers: mods, at: .zero) == .pass)
+    }
+
     @Test func keyBindsAreIgnored() {
         var m = MouseBindMatcher()
         m.setBinds([bind("bind", "ALT, H, movefocus, l")], dragThreshold: 0, scrollEventDelayMs: 0)

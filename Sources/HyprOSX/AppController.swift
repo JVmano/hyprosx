@@ -20,6 +20,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var executor: EffectExecutor!
     private var motion: MotionEngine!
     private var hotkeys: HotkeyManager!
+    private var mouseTap: MouseTap!
     private var mouseUp: MouseUpMonitor!
     private var mouseMonitor: Any?
     private var configErrors: [Diagnostic] = []
@@ -76,6 +77,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        mouseTap?.stop()
         hotkeys?.deactivate()
         dropPreview.hide()
         guard isSetUp, let world else { return }
@@ -143,6 +145,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             hotkeyInstallError = Diagnostic(SourceLocation(file: configStore.path, line: 1),
                                             "hotkeys are unavailable: the Carbon event handler could not be installed")
         }
+        mouseTap = MouseTap { [weak self] decision in self?.mouseDecision(decision) }
         mouseUp = MouseUpMonitor { [weak self] in self?.mouseReleased() }
         do {
             try SocketServer(path: SocketPaths.socket(), queue: .main) { [weak self] raw in self?.ipc(raw) ?? "" }.start()
@@ -238,6 +241,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     private func refreshHotkeys() {
         guard let world, !paused else { return }
         hotkeys.activate(world.activeBinds, allBinds: world.config.binds)
+        let message = "Mouse binds need the mouse event tap; it could not start"
+        if mouseTap.update(world.activeBinds, dragThreshold: world.config.bindsOptions.dragThreshold,
+                           scrollEventDelayMs: world.config.bindsOptions.scrollEventDelay) {
+            runtimeErrors.removeAll { $0 == message }
+        } else if !runtimeErrors.contains(message) {
+            runtimeErrors.append(message)
+        }
         status.update()
     }
 
@@ -294,6 +304,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             return
         }
         guard let world else { return }
+        mouseTap.stop()
         dropPreview.hide()
         motion.stopAll()
         execute(world.releaseParked())
@@ -370,6 +381,20 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard let world, !paused else { return }
         world.cursor = Screens.cursor()
         execute(world.run(command).effects)
+    }
+
+    private func mouseDecision(_ decision: MouseDecision) {
+        switch decision {
+        case .run(let binds): runBinds(binds)
+        case .start(let action, let p): handle(.mouseBindStarted(action, p))
+        case .move(let p):
+            handle(.mouseBindMoved(p))
+            updateDropPreview()
+        case .end(let p):
+            handle(.mouseBindEnded(p))
+            dropPreview.hide()
+        case .pass, .consume: break
+        }
     }
 
     private func runBinds(_ binds: [Bind]) {
