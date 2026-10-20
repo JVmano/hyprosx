@@ -68,6 +68,37 @@ private func near(_ a: Rect?, _ b: Rect) -> Bool {
         #expect(styled?.from == Rect(x: -900, y: 100, width: 1000, height: 500))
     }
 
+    @Test func slideOpensIgnoreTheAppFrameEvenWhenSlow() {
+        let c = makeConfig("animations {\n animation = windowsIn, 1, 4, default, slide left\n}\n")
+        let open = FrameChange(id: 1, frame: goal, reason: .open)
+        let appFrame = Rect(x: 0, y: 0, width: 300, height: 300)
+        let slow = Motion.plan(open, current: appFrame, monitor: screen, config: c, environment: MotionEnvironment(), window: WindowMotion(), live: false)
+        #expect(slow?.from == Rect(x: -900, y: 100, width: 1000, height: 500))
+        let ruled = Motion.plan(open, current: appFrame, monitor: screen, config: makeConfig(), environment: MotionEnvironment(), window: WindowMotion(style: "slide left"), live: false)
+        #expect(ruled?.from == Rect(x: -900, y: 100, width: 1000, height: 500))
+    }
+
+    @Test func popinNeedsAPercentSign() {
+        #expect(near(Motion.openStart(goal: goal, monitor: screen, style: "popin 87"), Rect(x: 597.5, y: 347.5, width: 5, height: 5)))
+        #expect(near(Motion.openStart(goal: goal, monitor: screen, style: "popin"), Rect(x: 597.5, y: 347.5, width: 5, height: 5)))
+    }
+
+    @Test func workspaceGapsWidenTheSlideInOffset() {
+        #expect(Motion.slideIn(goal: goal, monitor: screen, style: "slide", leftward: true, gap: 10) == Rect(x: 1622, y: 100, width: 1000, height: 500))
+        #expect(Motion.slideIn(goal: goal, monitor: screen, style: "slidevert", leftward: false, gap: 10) == Rect(x: 100, y: -892, width: 1000, height: 500))
+        let c = makeConfig("general {\n gaps_workspaces = 10\n}\n")
+        let change = FrameChange(id: 1, frame: goal, reason: .workspaceIn(leftward: true))
+        #expect(Motion.plan(change, current: nil, monitor: screen, config: c, environment: MotionEnvironment(), window: WindowMotion(), live: true)?.from.x == 1622)
+    }
+
+    @Test func workspaceAndSpecialPlansStartOffscreen() {
+        let c = makeConfig("animations {\n animation = workspacesIn, 1, 4, default, slidevert\n}\n")
+        let back = FrameChange(id: 1, frame: goal, reason: .workspaceIn(leftward: false))
+        #expect(Motion.plan(back, current: nil, monitor: screen, config: c, environment: MotionEnvironment(), window: WindowMotion(), live: true)?.from.y == -882)
+        let special = FrameChange(id: 1, frame: goal, reason: .specialIn)
+        #expect(Motion.plan(special, current: nil, monitor: screen, config: makeConfig(), environment: MotionEnvironment(), window: WindowMotion(), live: true)?.from.x == 1612)
+    }
+
     @Test func moveAndManualResizePlans() {
         let c = makeConfig()
         let move = FrameChange(id: 1, frame: goal, reason: .layout)

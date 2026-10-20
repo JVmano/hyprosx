@@ -54,11 +54,12 @@ public enum Motion {
         let from: Rect
         switch change.reason {
         case .open:
-            if !live, let current { from = current } else { from = openStart(goal: goal, monitor: monitor, style: window.style ?? leafStyle) }
+            let style = window.style ?? leafStyle
+            if !live, !style.hasPrefix("slide"), let current { from = current } else { from = openStart(goal: goal, monitor: monitor, style: style) }
         case .workspaceIn(let leftward):
-            from = slideIn(goal: goal, monitor: monitor, style: leafStyle, leftward: leftward)
+            from = slideIn(goal: goal, monitor: monitor, style: leafStyle, leftward: leftward, gap: Double(config.general.gapsWorkspaces))
         case .specialIn:
-            from = slideIn(goal: goal, monitor: monitor, style: leafStyle, leftward: true)
+            from = slideIn(goal: goal, monitor: monitor, style: leafStyle, leftward: true, gap: Double(config.general.gapsWorkspaces))
         default:
             guard let current else { return nil }
             from = current
@@ -92,7 +93,7 @@ public enum Motion {
             default: return Rect(x: goal.x, y: monitor.minY - goal.height, width: goal.width, height: goal.height)
             }
         }
-        let percent = words.first == "popin" && words.count > 1 ? (finiteDouble(String(words[1].dropLast())) ?? 0) : 0
+        let percent = words.first == "popin" && words.count > 1 && words[1].hasSuffix("%") ? (finiteDouble(String(words[1].dropLast())) ?? 0) : 0
         let w = min(max(goal.width * percent / 100, 5), goal.width)
         let h = min(max(goal.height * percent / 100, 5), goal.height)
         return Rect(x: goal.center.x - w / 2, y: goal.center.y - h / 2, width: w, height: h)
@@ -117,14 +118,14 @@ public enum Motion {
         return (kind, vertical, percent)
     }
 
-    public static func slideIn(goal: Rect, monitor: Rect, style: String, leftward: Bool) -> Rect {
+    public static func slideIn(goal: Rect, monitor: Rect, style: String, leftward: Bool, gap: Double = 0) -> Rect {
         let s = slideStyle(style)
         let percent = s.kind == "fade" ? 8 : s.percent
         let sign: Double = leftward ? 1 : -1
         if s.vertical {
-            return Rect(x: goal.x, y: goal.y + sign * monitor.height * percent / 100, width: goal.width, height: goal.height)
+            return Rect(x: goal.x, y: goal.y + sign * (monitor.height + gap) * percent / 100, width: goal.width, height: goal.height)
         }
-        return Rect(x: goal.x + sign * monitor.width * percent / 100, y: goal.y, width: goal.width, height: goal.height)
+        return Rect(x: goal.x + sign * (monitor.width + gap) * percent / 100, y: goal.y, width: goal.width, height: goal.height)
     }
 
     public static func slideOut(current: Rect, monitor: Rect, style: String, leftward: Bool) -> Rect? {
