@@ -199,7 +199,7 @@ public final class World {
     }
 
     func tileFrame(_ w: ManagedWindow, box: Rect, ctx: LayoutContext, gaps: Edges, border: Double) -> Rect {
-        let b = w.props["border_size"].flatMap { finiteDouble($0) }.map(World.borderWidth) ?? border
+        let b = borderWidth(of: w, rules: dynamicOutcome(for: w), fallback: border)
         return WindowGeometry.frame(tile: box, workArea: ctx.workArea, gapsIn: gaps, borderSize: b, pseudoSize: w.isPseudo ? w.pseudoSize : nil)
     }
 

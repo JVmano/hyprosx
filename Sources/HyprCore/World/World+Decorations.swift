@@ -16,6 +16,12 @@ public struct DecorationSet: Equatable, Sendable {
 }
 
 extension World {
+    func borderWidth(of w: ManagedWindow, rules: DynamicRuleOutcome, fallback: Double) -> Double {
+        w.props["border_size"].flatMap { finiteDouble($0) }.map(World.borderWidth)
+            ?? rules.borderSize.map { World.borderWidth(Double($0)) }
+            ?? fallback
+    }
+
     public func decorations() -> DecorationSet {
         var set = DecorationSet()
         set.dimAroundStrength = config.decoration.dimAround
@@ -25,9 +31,7 @@ extension World {
             let rules = dynamicOutcome(for: w)
             if rules.dimAround { set.dimAround.append(id) }
             let active = focusedWindow == id
-            let width = w.props["border_size"].flatMap { finiteDouble($0) }.map(World.borderWidth)
-                ?? rules.borderSize.map { World.borderWidth(Double($0)) }
-                ?? borderSize(for: ws)
+            let width = borderWidth(of: w, rules: rules, fallback: borderSize(for: ws))
             var border: Gradient? = w.props["border_color"].flatMap { ConfigValue.gradient($0) }
                 ?? (active ? rules.activeBorder ?? config.general.activeBorder : rules.inactiveBorder ?? config.general.inactiveBorder)
             if w.fullscreenMode != nil || width <= 0 || border?.isFullyTransparent == true { border = nil }

@@ -57,6 +57,17 @@ private func deco(_ w: World, _ id: WindowID) -> Decoration? { w.decorations().w
         #expect(deco(w, 1)?.border?.colors.first?.b == 1)
     }
 
+    @Test func aWindowRuleBorderSizeReservesItsTileFrame() {
+        func frame(_ text: String) -> Rect {
+            let w = world(colors + text)
+            _ = w.handle(.windowAppeared(snap(1)))
+            return w.windows[1]!.appliedFrame!
+        }
+        let plain = frame("")
+        let ruled = frame("windowrule = border_size 5, match:class Ghostty\n")
+        #expect(ruled == Rect(x: plain.x + 3, y: plain.y + 3, width: plain.width - 6, height: plain.height - 6))
+    }
+
     @Test func dimInactiveDimsOnlyInactiveTiledWindows() {
         let w = pair("decoration {\n dim_inactive = true\n dim_strength = 0.3\n}\n")
         #expect(deco(w, 1)?.dim == 0)
