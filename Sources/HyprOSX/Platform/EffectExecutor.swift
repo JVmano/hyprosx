@@ -9,6 +9,7 @@ final class EffectExecutor {
     var onSpawned: (Int, pid_t) -> Void = { _, _ in }
     var onSpawnFailed: (String) -> Void = { _ in }
     var onAppEffect: (Effect) -> Void = { _ in }
+    var onRaised: (WindowID) -> Void = { _ in }
 
     init(tracker: AppTracker, windowPID: @escaping (WindowID) -> pid_t?, environment: @escaping () -> [String: String],
          motion: MotionEngine) {
@@ -27,8 +28,10 @@ final class EffectExecutor {
                 motion.park(parks)
             case .focus(let id):
                 thread(id)?.focus(id)
+                onRaised(id)
             case .raise(let id):
                 thread(id)?.raise(id)
+                onRaised(id)
             case .close(let id):
                 thread(id)?.close(id)
             case .signal(let pid, let signal):

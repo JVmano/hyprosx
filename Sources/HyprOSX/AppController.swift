@@ -12,6 +12,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let configStore = ConfigStore()
     private let stateStore = StateStore()
     private let dropPreview = DropPreview()
+    private let borders = BorderWindows()
     private var status: StatusItem!
     private var world: World?
     private var tracker: AppTracker!
@@ -87,6 +88,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let threads = Array(tracker.threads.values)
         DispatchQueue.concurrentPerform(iterations: threads.count) { threads[$0].flush(timeout: Self.quitFlushSeconds) }
         if socketStarted { unlink(SocketPaths.socket()) }
+        borders.removeAll()
     }
 
     private func installSignalHandlers() {
@@ -116,9 +118,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             self?.world?.windows[id].flatMap { self?.tracker.threads[$0.pid] }
         }, world: { [weak self] in self?.world })
         motion.onSettled = { [weak self] id in self?.readBack(id) }
+        motion.onFrame = { [weak self] id, frame in self?.borders.move(id, frame) }
         executor = EffectExecutor(tracker: tracker, windowPID: { [weak self] id in self?.world?.windows[id]?.pid }, environment: { [weak self] in
             Spawner.environment(base: ProcessInfo.processInfo.environment, extra: self?.world?.config.environment ?? [])
         }, motion: motion)
+        executor.onRaised = { [weak self] id in self?.borders.reorder(id) }
         executor.onSpawned = { [weak self] token, pid in self?.world?.registerSpawn(token: token, pid: pid) }
         executor.onSpawnFailed = { [weak self] message in
             guard let self, !self.runtimeErrors.contains(message) else { return }
@@ -296,6 +300,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         dragPending = false
         delayedPending = false
         paused = true
+        borders.removeAll()
         status.update()
     }
 
@@ -342,6 +347,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         tracker.threads[pid]?.readFrame(id) { [weak self] frame in
             guard let frame else { return }
             self?.handle(.windowFrameChanged(id, frame, userDriven: false))
+            self?.borders.move(id, frame)
         }
     }
 
@@ -382,7 +388,19 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func execute(_ effects: [Effect]) {
-        if !effects.isEmpty { executor.execute(effects) }
+        guard !effects.isEmpty else { return }
+        executor.execute(effects)
+        decorate()
+    }
+
+    private func decorate() {
+        guard let world, !paused else { return }
+        let c = world.config
+        let angleLeaf = c.animations.leaf("borderangle")
+        let angle = Motion.decorationTiming("borderangle", config: c).map { (timing: $0, loop: angleLeaf.style == "loop") }
+        borders.apply(world.decorations(), animating: motion.animating,
+                      radius: c.macos.borderRadius >= 0 ? Double(c.macos.borderRadius) : BorderWindows.defaultRadius(),
+                      colorTiming: Motion.decorationTiming("border", config: c), angle: angle)
     }
 
     private func saveStateNow() {
