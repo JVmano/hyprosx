@@ -320,9 +320,12 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func handle(_ event: PlatformEvent) {
         guard let world, !paused else { return }
+        var event = event
         switch event {
         case .windowDisappeared(let id): motion.cancel(id)
         case .appTerminated(let pid): for w in world.windows.values where w.pid == pid { motion.cancel(w.id) }
+        case .windowFrameChanged(let id, let frame, userDriven: true) where motion.isMoving(id):
+            event = .windowFrameChanged(id, frame, userDriven: false)
         default: break
         }
         world.cursor = Screens.cursor()
