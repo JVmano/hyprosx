@@ -54,6 +54,7 @@ public struct MouseBindMatcher: Sendable {
     }
 
     public mutating func down(button: Int, modifiers: Modifiers, at p: Point) -> MouseDecision {
+        if claimed.remove(button) != nil, press?.button == button { press = nil }
         let trigger = BindTrigger.mouse(Self.buttonBase + button)
         let mods = Self.clean(modifiers)
         let matching = binds.filter { $0.trigger == trigger && $0.modifiers == mods }
@@ -69,8 +70,9 @@ public struct MouseBindMatcher: Sendable {
         return onPress.isEmpty ? .consume : .run(onPress)
     }
 
-    public mutating func dragged(to p: Point) -> MouseDecision {
-        guard var current = press else { return claimed.isEmpty ? .pass : .consume }
+    public mutating func dragged(button: Int, to p: Point) -> MouseDecision {
+        guard claimed.contains(button) else { return .pass }
+        guard var current = press, current.button == button else { return .consume }
         if !current.started {
             guard hypot(p.x - current.origin.x, p.y - current.origin.y) >= threshold else { return .consume }
             current.started = true

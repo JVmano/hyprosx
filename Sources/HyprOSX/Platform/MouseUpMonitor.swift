@@ -20,7 +20,7 @@ final class MouseUpMonitor {
         monitor = nil
     }
 
-    private func fire() {
+    func fire() {
         guard monitor != nil else { return }
         disarm()
         onMouseUp()

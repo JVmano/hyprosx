@@ -21,7 +21,7 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
     @Test func unboundClicksPass() {
         var m = matcher()
         #expect(m.down(button: 0, modifiers: [], at: .zero) == .pass)
-        #expect(m.dragged(to: Point(x: 5, y: 5)) == .pass)
+        #expect(m.dragged(button: 0, to: Point(x: 5, y: 5)) == .pass)
         #expect(m.up(button: 0, modifiers: [], at: .zero) == .pass)
         #expect(m.scroll(.down, modifiers: [], now: 0) == .pass)
     }
@@ -29,7 +29,7 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
     @Test func aDragBindStartsMovesAndEnds() {
         var m = matcher()
         #expect(m.down(button: 0, modifiers: mods, at: Point(x: 1, y: 1)) == .start(.move, Point(x: 1, y: 1)))
-        #expect(m.dragged(to: Point(x: 9, y: 9)) == .move(Point(x: 9, y: 9)))
+        #expect(m.dragged(button: 0, to: Point(x: 9, y: 9)) == .move(Point(x: 9, y: 9)))
         #expect(m.up(button: 0, modifiers: mods, at: Point(x: 9, y: 9)) == .end(Point(x: 9, y: 9)))
         #expect(m.down(button: 1, modifiers: mods, at: .zero) == .start(.resize, .zero))
     }
@@ -37,9 +37,9 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
     @Test func theThresholdDelaysTheStart() {
         var m = matcher(threshold: 10)
         #expect(m.down(button: 0, modifiers: mods, at: .zero) == .consume)
-        #expect(m.dragged(to: Point(x: 5, y: 0)) == .consume)
-        #expect(m.dragged(to: Point(x: 12, y: 0)) == .start(.move, .zero))
-        #expect(m.dragged(to: Point(x: 20, y: 0)) == .move(Point(x: 20, y: 0)))
+        #expect(m.dragged(button: 0, to: Point(x: 5, y: 0)) == .consume)
+        #expect(m.dragged(button: 0, to: Point(x: 12, y: 0)) == .start(.move, .zero))
+        #expect(m.dragged(button: 0, to: Point(x: 20, y: 0)) == .move(Point(x: 20, y: 0)))
         #expect(m.up(button: 0, modifiers: mods, at: Point(x: 20, y: 0)) == .end(Point(x: 20, y: 0)))
     }
 
@@ -69,7 +69,7 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
         #expect(m.down(button: 0, modifiers: mods, at: .zero) == .start(.move, .zero))
         #expect(m.down(button: 1, modifiers: mods, at: Point(x: 3, y: 3)) == .consume)
         #expect(m.up(button: 1, modifiers: mods, at: Point(x: 3, y: 3)) == .consume)
-        #expect(m.dragged(to: Point(x: 4, y: 4)) == .move(Point(x: 4, y: 4)))
+        #expect(m.dragged(button: 0, to: Point(x: 4, y: 4)) == .move(Point(x: 4, y: 4)))
         #expect(m.up(button: 0, modifiers: mods, at: Point(x: 4, y: 4)) == .end(Point(x: 4, y: 4)))
     }
 
@@ -79,12 +79,55 @@ private func matcher(threshold: Int = 0, delay: Int = 300) -> MouseBindMatcher {
         #expect(m.down(button: 0, modifiers: mods, at: .zero) == .start(.move, .zero))
     }
 
+    @Test func onlyTheActivePressButtonMovesTheDrag() {
+        var m = matcher()
+        _ = m.down(button: 0, modifiers: mods, at: .zero)
+        #expect(m.dragged(button: 1, to: Point(x: 3, y: 3)) == .pass)
+        #expect(m.dragged(button: 0, to: Point(x: 4, y: 4)) == .move(Point(x: 4, y: 4)))
+        _ = m.down(button: 1, modifiers: mods, at: Point(x: 4, y: 4))
+        #expect(m.dragged(button: 1, to: Point(x: 6, y: 6)) == .consume)
+        #expect(m.dragged(button: 2, to: Point(x: 6, y: 6)) == .pass)
+        #expect(m.dragged(button: 0, to: Point(x: 7, y: 7)) == .move(Point(x: 7, y: 7)))
+    }
+
+    @Test func aDragOfAnUnclaimedButtonPassesWhileAClickBindIsClaimed() {
+        var m = matcher()
+        #expect(m.down(button: 2, modifiers: [.command], at: .zero) == .run([middle]))
+        #expect(m.dragged(button: 2, to: Point(x: 3, y: 3)) == .consume)
+        #expect(m.dragged(button: 0, to: Point(x: 3, y: 3)) == .pass)
+    }
+
+    @Test func aNewDownOnAClaimedButtonRecoversFromALostUp() {
+        var m = matcher()
+        #expect(m.down(button: 0, modifiers: mods, at: Point(x: 1, y: 1)) == .start(.move, Point(x: 1, y: 1)))
+        #expect(m.down(button: 0, modifiers: mods, at: Point(x: 5, y: 5)) == .start(.move, Point(x: 5, y: 5)))
+        #expect(m.dragged(button: 0, to: Point(x: 6, y: 6)) == .move(Point(x: 6, y: 6)))
+        #expect(m.up(button: 0, modifiers: mods, at: Point(x: 6, y: 6)) == .end(Point(x: 6, y: 6)))
+    }
+
+    @Test func aLostUpLeavesNoStaleClaimWhenTheNextDownDoesNotMatch() {
+        var m = matcher()
+        _ = m.down(button: 0, modifiers: mods, at: .zero)
+        #expect(m.down(button: 0, modifiers: [], at: .zero) == .pass)
+        #expect(m.dragged(button: 0, to: Point(x: 3, y: 3)) == .pass)
+        #expect(m.up(button: 0, modifiers: [], at: .zero) == .pass)
+    }
+
+    @Test func aLostUpOfAnotherButtonKeepsTheActiveDrag() {
+        var m = matcher()
+        _ = m.down(button: 0, modifiers: mods, at: .zero)
+        #expect(m.down(button: 1, modifiers: mods, at: Point(x: 2, y: 2)) == .consume)
+        #expect(m.down(button: 1, modifiers: mods, at: Point(x: 3, y: 3)) == .consume)
+        #expect(m.dragged(button: 0, to: Point(x: 4, y: 4)) == .move(Point(x: 4, y: 4)))
+        #expect(m.up(button: 0, modifiers: mods, at: Point(x: 4, y: 4)) == .end(Point(x: 4, y: 4)))
+    }
+
     @Test func cancellingAStartedDragEndsItAndClearsThePress() {
         var m = matcher()
         _ = m.down(button: 0, modifiers: mods, at: .zero)
         #expect(m.cancel(at: Point(x: 7, y: 7)) == .end(Point(x: 7, y: 7)))
         #expect(m.up(button: 0, modifiers: mods, at: Point(x: 7, y: 7)) == .pass)
-        #expect(m.dragged(to: Point(x: 8, y: 8)) == .pass)
+        #expect(m.dragged(button: 0, to: Point(x: 8, y: 8)) == .pass)
         #expect(m.down(button: 1, modifiers: mods, at: .zero) == .start(.resize, .zero))
     }
 

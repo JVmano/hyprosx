@@ -145,7 +145,8 @@ final class AppController: NSObject, NSApplicationDelegate {
             hotkeyInstallError = Diagnostic(SourceLocation(file: configStore.path, line: 1),
                                             "hotkeys are unavailable: the Carbon event handler could not be installed")
         }
-        mouseTap = MouseTap { [weak self] decision in self?.mouseDecision(decision) }
+        mouseTap = MouseTap(onDecision: { [weak self] decision in self?.mouseDecision(decision) },
+                            onLeftUp: { [weak self] in self?.mouseUp.fire() })
         mouseUp = MouseUpMonitor { [weak self] in self?.mouseReleased() }
         do {
             try SocketServer(path: SocketPaths.socket(), queue: .main) { [weak self] raw in self?.ipc(raw) ?? "" }.start()

@@ -11,14 +11,19 @@ private func mouseTapCallback(_ proxy: CGEventTapProxy, _ type: CGEventType, _ e
 
 final class MouseTap {
     private let onDecision: (MouseDecision) -> Void
+    private let onLeftUp: () -> Void
     private let lock = NSLock()
     private var matcher = MouseBindMatcher()
     private var port: CFMachPort?
     private var runLoop: CFRunLoop?
+    private var generation = 0
     private let ready = DispatchSemaphore(value: 0)
     private let finished = DispatchSemaphore(value: 0)
 
-    init(onDecision: @escaping (MouseDecision) -> Void) { self.onDecision = onDecision }
+    init(onDecision: @escaping (MouseDecision) -> Void, onLeftUp: @escaping () -> Void) {
+        self.onDecision = onDecision
+        self.onLeftUp = onLeftUp
+    }
 
     func update(_ binds: [Bind], dragThreshold: Int, scrollEventDelayMs: Int) -> Bool {
         var next = MouseBindMatcher()
@@ -42,9 +47,11 @@ final class MouseTap {
     }
 
     func stop() {
+        let cursor = Screens.cursor()
         lock.lock()
-        let ended = matcher.cancel(at: Screens.cursor())
+        let ended = matcher.cancel(at: cursor)
         matcher = MouseBindMatcher()
+        generation += 1
         let stopped = (port: port, runLoop: runLoop)
         port = nil
         runLoop = nil
@@ -99,31 +106,49 @@ final class MouseTap {
         return m
     }
 
-    private func deliver(_ decisions: [MouseDecision]) {
-        DispatchQueue.main.async { [onDecision] in decisions.forEach(onDecision) }
+    private func deliver(_ decisions: [MouseDecision], leftUp: Bool = false, generation: Int) {
+        DispatchQueue.main.async { [self] in
+            lock.lock()
+            let current = self.generation
+            lock.unlock()
+            guard current == generation else { return }
+            decisions.forEach(onDecision)
+            if leftUp { onLeftUp() }
+        }
+    }
+
+    private static func button(_ type: CGEventType, _ event: CGEvent) -> Int {
+        switch type {
+        case .leftMouseDown, .leftMouseUp, .leftMouseDragged: return 0
+        case .rightMouseDown, .rightMouseUp, .rightMouseDragged: return 1
+        default: return Int(event.getIntegerValueField(.mouseEventButtonNumber))
+        }
     }
 
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            let cursor = Screens.cursor()
             lock.lock()
-            let ended = matcher.cancel(at: Screens.cursor())
+            let ended = matcher.cancel(at: cursor)
             let port = port
+            let generation = generation
             lock.unlock()
             if let port { CGEvent.tapEnable(tap: port, enable: true) }
-            if case .end = ended { deliver([ended]) }
+            if case .end = ended { deliver([ended], generation: generation) }
             return false
         }
         let p = Point(x: Double(event.location.x), y: Double(event.location.y))
         let mods = Self.modifiers(event.flags)
-        let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+        let button = Self.button(type, event)
         var followUp: [MouseDecision] = []
         lock.lock()
+        let generation = generation
         let decision: MouseDecision
         switch type {
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             decision = matcher.down(button: button, modifiers: mods, at: p)
         case .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
-            decision = matcher.dragged(to: p)
+            decision = matcher.dragged(button: button, to: p)
             if case .start = decision { followUp = [.move(p)] }
         case .leftMouseUp, .rightMouseUp, .otherMouseUp:
             decision = matcher.up(button: button, modifiers: mods, at: p)
@@ -138,9 +163,11 @@ final class MouseTap {
         lock.unlock()
         switch decision {
         case .pass: return false
-        case .consume: return true
+        case .consume:
+            if type == .leftMouseUp { deliver([], leftUp: true, generation: generation) }
+            return true
         default:
-            deliver([decision] + followUp)
+            deliver([decision] + followUp, leftUp: type == .leftMouseUp, generation: generation)
             return true
         }
     }
