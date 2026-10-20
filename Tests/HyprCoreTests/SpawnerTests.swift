@@ -82,8 +82,8 @@ import Foundation
         let env = ProcessInfo.processInfo.environment
         let pids = try (0..<2000).map { _ in try Spawner.spawn("true", environment: env).get() }
         var remaining = pids
-        let deadline = Date().addingTimeInterval(15)
-        while !remaining.isEmpty && Date() < deadline {
+        let deadline = ContinuousClock.now + .seconds(15)
+        while !remaining.isEmpty && ContinuousClock.now < deadline {
             remaining = remaining.filter { processState($0) != nil }
             if !remaining.isEmpty { usleep(10_000) }
         }

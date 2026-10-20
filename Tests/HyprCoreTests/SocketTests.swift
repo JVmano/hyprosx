@@ -85,9 +85,9 @@ import Foundation
         try SocketServer(path: path, queue: DispatchQueue(label: "socket-test-5")) { _ in "fresh" }.start()
         let silent = rawConnect(path)
         defer { close(silent) }
-        let start = Date()
+        let start = ContinuousClock.now
         #expect(SocketClient.send("version", to: path) == "fresh")
-        #expect(Date().timeIntervalSince(start) < 3)
+        #expect(ContinuousClock.now - start < .seconds(3))
     }
 
     @Test func trickleClientIsCutOffByAnOverallDeadline() throws {
@@ -103,9 +103,9 @@ import Foundation
             }
             close(trickle)
         }
-        let start = Date()
+        let start = ContinuousClock.now
         #expect(SocketClient.send("version", to: path) == "got 7")
-        #expect(Date().timeIntervalSince(start) < 3)
+        #expect(ContinuousClock.now - start < .seconds(3))
     }
 
     @Test func clientThatNeverReadsDoesNotBlockTheNextOne() throws {
@@ -118,9 +118,9 @@ import Foundation
         defer { close(stuck) }
         write(stuck, "big", 3)
         shutdown(stuck, SHUT_WR)
-        let start = Date()
+        let start = ContinuousClock.now
         #expect(SocketClient.send("other", to: path) == "small")
-        #expect(Date().timeIntervalSince(start) < 5)
+        #expect(ContinuousClock.now - start < .seconds(5))
     }
 
     @Test func oversizeRequestIsRefusedNotTruncated() throws {
