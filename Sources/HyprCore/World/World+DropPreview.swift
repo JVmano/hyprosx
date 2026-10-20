@@ -32,6 +32,7 @@ extension World {
         copy.nextSpawnToken = nextSpawnToken
         copy.dragging = dragging
         copy.dragIsResize = dragIsResize
+        copy.mouseDrag = mouseDrag
         copy.placementOrder = placementOrder
         return copy
     }

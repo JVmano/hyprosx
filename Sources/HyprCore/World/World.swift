@@ -24,6 +24,7 @@ public final class World {
     var nextSpawnToken = 1
     var dragging: WindowID?
     var dragIsResize = false
+    var mouseDrag: MouseDrag?
     var placementOrder: [WindowID] = []
     var effects: [Effect] = []
 
@@ -61,6 +62,9 @@ public final class World {
         case .dragEnded(let point): endDrag(at: point)
         case .focusChanged(let id): nativeFocusChanged(id)
         case .cursorMoved(let point): cursorMoved(point)
+        case .mouseBindStarted(let action, let point): mouseBindStarted(action, at: point)
+        case .mouseBindMoved(let point): mouseBindMoved(to: point)
+        case .mouseBindEnded(let point): mouseBindEnded(at: point)
         }
     }
 
@@ -479,6 +483,7 @@ public final class World {
             dragging = nil
             dragIsResize = false
         }
+        if mouseDrag?.id == id { mouseDrag = nil }
         if focusedWindow == id {
             focusedWindow = nil
             if isVisible(w.workspace), let next = focusCandidate(onWorkspace: w.workspace, near: center) {

@@ -56,4 +56,7 @@ public enum PlatformEvent: Equatable, Sendable {
     case dragEnded(cursor: Point)
     case focusChanged(WindowID?)
     case cursorMoved(Point)
+    case mouseBindStarted(MouseBindAction, Point)
+    case mouseBindMoved(Point)
+    case mouseBindEnded(Point)
 }

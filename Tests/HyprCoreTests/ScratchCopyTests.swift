@@ -19,6 +19,8 @@ func dirtyWorld() -> World {
     w.focusedWindow = 1
     w.dragging = 1
     w.dragIsResize = true
+    w.mouseDrag = MouseDrag(id: 1, action: .resize, start: Point(x: 1, y: 2), last: Point(x: 3, y: 4), corner: .topLeft,
+                            startFrame: Rect(x: 5, y: 6, width: 7, height: 8))
     w.placementOrder = [2, 1]
     return w
 }

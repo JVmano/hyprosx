@@ -18,6 +18,7 @@ extension World {
             dragging = nil
             dragIsResize = false
         }
+        if mouseDrag?.id == id { mouseDrag = nil }
         if focusedWindow == id {
             focusedWindow = nil
             if isVisible(w.workspace) {
