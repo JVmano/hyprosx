@@ -18,6 +18,7 @@ public struct MouseBindMatcher: Sendable {
         var button: Int
         var action: MouseBindAction
         var origin: Point
+        var last: Point
         var started: Bool
     }
 
@@ -53,8 +54,14 @@ public struct MouseBindMatcher: Sendable {
         }
     }
 
+    public mutating func recover(button: Int) -> MouseDecision {
+        guard claimed.remove(button) != nil, let current = press, current.button == button else { return .pass }
+        press = nil
+        return current.started ? .end(current.last) : .pass
+    }
+
     public mutating func down(button: Int, modifiers: Modifiers, at p: Point) -> MouseDecision {
-        if claimed.remove(button) != nil, press?.button == button { press = nil }
+        _ = recover(button: button)
         let trigger = BindTrigger.mouse(Self.buttonBase + button)
         let mods = Self.clean(modifiers)
         let matching = binds.filter { $0.trigger == trigger && $0.modifiers == mods }
@@ -63,7 +70,7 @@ public struct MouseBindMatcher: Sendable {
         if let drag = matching.first(where: { $0.flags.contains(.mouse) && Self.action($0.dispatcher) != nil }),
            let action = Self.action(drag.dispatcher) {
             guard press == nil else { return .consume }
-            press = Press(button: button, action: action, origin: p, started: threshold == 0)
+            press = Press(button: button, action: action, origin: p, last: p, started: threshold == 0)
             return threshold == 0 ? .start(action, p) : .consume
         }
         let onPress = matching.filter { !$0.flags.contains(.mouse) && !$0.flags.contains(.release) }
@@ -76,9 +83,12 @@ public struct MouseBindMatcher: Sendable {
         if !current.started {
             guard hypot(p.x - current.origin.x, p.y - current.origin.y) >= threshold else { return .consume }
             current.started = true
+            current.last = p
             press = current
             return .start(current.action, current.origin)
         }
+        current.last = p
+        press = current
         return .move(p)
     }
 

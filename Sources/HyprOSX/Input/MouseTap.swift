@@ -49,15 +49,14 @@ final class MouseTap {
     func stop() {
         let cursor = Screens.cursor()
         lock.lock()
-        let ended = matcher.cancel(at: cursor)
         matcher = MouseBindMatcher()
         generation += 1
         let stopped = (port: port, runLoop: runLoop)
         port = nil
         runLoop = nil
         lock.unlock()
-        if case .end = ended { onDecision(ended) }
         guard let port = stopped.port else { return }
+        onDecision(.end(cursor))
         CGEvent.tapEnable(tap: port, enable: false)
         CFMachPortInvalidate(port)
         if let rl = stopped.runLoop {
@@ -111,7 +110,10 @@ final class MouseTap {
             lock.lock()
             let current = self.generation
             lock.unlock()
-            guard current == generation else { return }
+            guard current == generation else {
+                if leftUp { onLeftUp() }
+                return
+            }
             decisions.forEach(onDecision)
             if leftUp { onLeftUp() }
         }
@@ -140,12 +142,15 @@ final class MouseTap {
         let p = Point(x: Double(event.location.x), y: Double(event.location.y))
         let mods = Self.modifiers(event.flags)
         let button = Self.button(type, event)
+        var lost: [MouseDecision] = []
         var followUp: [MouseDecision] = []
         lock.lock()
         let generation = generation
         let decision: MouseDecision
         switch type {
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            let recovered = matcher.recover(button: button)
+            if recovered != .pass { lost = [recovered] }
             decision = matcher.down(button: button, modifiers: mods, at: p)
         case .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             decision = matcher.dragged(button: button, to: p)
@@ -161,14 +166,14 @@ final class MouseTap {
             decision = .pass
         }
         lock.unlock()
+        let consumed = decision != .pass
+        let batch: [MouseDecision]
         switch decision {
-        case .pass: return false
-        case .consume:
-            if type == .leftMouseUp { deliver([], leftUp: true, generation: generation) }
-            return true
-        default:
-            deliver([decision] + followUp, leftUp: type == .leftMouseUp, generation: generation)
-            return true
+        case .pass, .consume: batch = lost
+        default: batch = lost + [decision] + followUp
         }
+        let leftUp = consumed && type == .leftMouseUp
+        if !batch.isEmpty || leftUp { deliver(batch, leftUp: leftUp, generation: generation) }
+        return consumed
     }
 }
