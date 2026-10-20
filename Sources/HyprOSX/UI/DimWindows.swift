@@ -28,10 +28,15 @@ final class DimWindows {
         func timing(_ id: WindowID) -> MotionTiming? { noAnim(id) ? nil : base }
         var wanted: [WindowID: Decoration] = [:]
         for d in set.windows where d.dim > 0 { wanted[d.id] = d }
+        let present = Set(set.windows.map(\.id))
         for (id, entry) in inactive where wanted[id] == nil {
             inactive[id] = nil
             if pending.remove(id) != nil { continue }
-            fade(entry.window, to: 0, timing: timing(id)) { entry.window.orderOut(nil) }
+            if present.contains(id) {
+                fade(entry.window, to: 0, timing: timing(id)) { entry.window.orderOut(nil) }
+            } else {
+                entry.window.orderOut(nil)
+            }
         }
         for (id, d) in wanted {
             if var entry = inactive[id] {
