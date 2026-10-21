@@ -10,7 +10,7 @@ import Foundation
         #expect(diagnostics.map(\.description) == [])
         #expect(config.general.gapsIn == Edges(all: 4))
         #expect(config.general.gapsOut == Edges(all: 10))
-        #expect(config.general.borderSize == 2)
+        #expect(config.general.borderSize == 0)
         #expect(config.dwindle.preserveSplit && config.dwindle.forceSplit == 2)
         #expect(config.cursor.noWarps && config.input.followMouse == 0 && config.macos.unhideHiddenApps)
         #expect(config.windowRules.count == 8)
