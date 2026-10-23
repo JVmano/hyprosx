@@ -21,6 +21,8 @@ This builds `~/Applications/HyprOSX.app` and links the `hyprctl` CLI to `~/.loca
 3. Edit `~/.config/hyprosx/hyprland.conf`. HyprOSX reloads it on save.
 4. Use `hyprctl` like in Hyprland, for example `hyprctl dispatch workspace 2` or `hyprctl configerrors`.
 
+Optional: `scripts/make-signing-identity.sh` creates a local signing identity, so macOS keeps the Accessibility grant across rebuilds.
+
 ## Keybinds
 
 These are the binds in `config/owner/hyprland.conf`. `⌥` is Option (`ALT` in the config). Change them in your `hyprland.conf`.
@@ -56,8 +58,6 @@ These are the binds in `config/owner/hyprland.conf`. `⌥` is Option (`ALT` in t
 | `⌃ ⌥` + scroll | Go to the next / previous workspace |
 
 A placed window keeps its rectangle, and the other windows tile around it.
-
-Optional: `scripts/make-signing-identity.sh` creates a local signing identity, so macOS keeps the Accessibility grant across rebuilds.
 
 ## Credits
 
