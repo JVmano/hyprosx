@@ -59,6 +59,20 @@ These are the binds in `config/owner/hyprland.conf`. `⌥` is Option (`ALT` in t
 
 A placed window keeps its rectangle, and the other windows tile around it.
 
+## Uninstall
+
+1. Quit HyprOSX from its menu bar item. It moves every window back on screen before it quits.
+2. Remove the app, the CLI link and the saved state:
+
+   ```sh
+   rm -r ~/Applications/HyprOSX.app "$HOME/Library/Application Support/HyprOSX"
+   rm ~/.local/bin/hyprctl
+   ```
+
+3. Remove the Accessibility grant: `tccutil reset Accessibility dev.hyprosx.HyprOSX`
+4. Optional: remove your config with `rm -r ~/.config/hyprosx`.
+5. If you created the signing identity: `security delete-identity -c "HyprOSX Local Signing"`
+
 ## Credits
 
 See [NOTICE](NOTICE) for the code ported from AeroSpace (MIT) and the Hyprland reference (BSD-3-Clause).
